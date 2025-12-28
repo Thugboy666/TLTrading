@@ -26,10 +26,18 @@ function hideOverlay() {
   overlayEl.style.display = 'none';
 }
 
+function makeMaterial(index) {
+  const colors = [0x4caf50, 0x2196f3, 0xff9800, 0xf44336, 0x9c27b0];
+  return new THREE.MeshBasicMaterial({ color: colors[index % colors.length] });
+}
+
 function initScene() {
   try {
     if (!window.THREE || !THREE.WebGLRenderer || !THREE.Scene || !THREE.PerspectiveCamera) {
-      setOverlay('Three.js not loaded correctly (local vendor missing).');
+      const msg = 'Three.js not loaded correctly (local vendor missing).';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -40,7 +48,10 @@ function initScene() {
     if (!height) height = 600;
 
     if (!THREE.Mesh || !THREE.SphereGeometry || !THREE.MeshBasicMaterial || !THREE.Group || !THREE.Raycaster || !THREE.Vector2) {
-      setOverlay('Three.js not loaded correctly (local vendor missing).');
+      const msg = 'Three.js not loaded correctly (local vendor missing).';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -49,12 +60,19 @@ function initScene() {
     camera.position.z = 6;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio || 1);
-    renderer.setSize(width, height, false);
+    if (typeof renderer.setPixelRatio === 'function') {
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+    }
+    if (typeof renderer.setSize === 'function') {
+      renderer.setSize(width, height, false);
+    }
     canvasContainer.appendChild(renderer.domElement);
 
     if (typeof renderer.render !== 'function') {
-      setOverlay('Three.js renderer is invalid or incomplete. WebGL not available.');
+      const msg = 'Three.js renderer is invalid or incomplete. WebGL not available.';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -69,20 +87,13 @@ function initScene() {
     scene.add(originSphere);
 
     const geometry = new THREE.SphereGeometry(0.5, 32, 32);
-    const materials = [
-      new THREE.MeshBasicMaterial({ color: 0x4caf50 }),
-      new THREE.MeshBasicMaterial({ color: 0x2196f3 }),
-      new THREE.MeshBasicMaterial({ color: 0xff9800 }),
-      new THREE.MeshBasicMaterial({ color: 0xf44336 }),
-      new THREE.MeshBasicMaterial({ color: 0x9c27b0 }),
-    ];
 
     const group = new THREE.Group();
     const nodeMeshes = [];
     let selectedMesh = null;
     let selectedNodeId = null;
     nodes.forEach((n, idx) => {
-      const mesh = new THREE.Mesh(geometry, materials[idx % materials.length].clone());
+      const mesh = new THREE.Mesh(geometry, makeMaterial(idx));
       mesh.position.x = (idx - 2) * 2;
       mesh.userData = { id: n.id };
       group.add(mesh);
@@ -129,6 +140,7 @@ function initScene() {
         hitId = nodeId;
         selectedNodeId = nodeId;
         updateSelection(intersects[0].object);
+        outputEl.textContent = `Selected node: ${nodeId}`;
         showNodeOutput(nodeId);
       }
       const ndcText = `NDC: ${mouse.x.toFixed(3)}, ${mouse.y.toFixed(3)}`;
@@ -143,7 +155,9 @@ function initScene() {
       if (!newHeight) newHeight = 600;
       camera.aspect = newWidth / newHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(newWidth, newHeight, false);
+      if (typeof renderer.setSize === 'function') {
+        renderer.setSize(newWidth, newHeight, false);
+      }
     }
     window.addEventListener('resize', onResize);
 
@@ -157,7 +171,10 @@ function initScene() {
     hideOverlay();
   } catch (err) {
     console.error(err);
-    setOverlay(`Error initializing scene: ${err.message || err}`);
+    const msg = `Error initializing scene: ${err.message || err}`;
+    setOverlay(msg);
+    statusEl.textContent = msg;
+    outputEl.textContent = msg;
   }
 }
 
@@ -199,5 +216,8 @@ try {
   initScene();
 } catch (err) {
   console.error(err);
-  setOverlay(`Error initializing scene: ${err.message || err}`);
+  const msg = `Error initializing scene: ${err.message || err}`;
+  setOverlay(msg);
+  statusEl.textContent = msg;
+  outputEl.textContent = msg;
 }

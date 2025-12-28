@@ -5,6 +5,18 @@
   <title>TheLightTrading GUI</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="/vendor/three.min.js"></script>
+  <script>
+    if (!window.THREE) {
+      const warn = document.createElement('div');
+      warn.style.padding = '8px';
+      warn.style.background = '#fdd';
+      warn.style.color = '#900';
+      warn.textContent = 'Warning: Three.js failed to load. 3D view disabled.';
+      document.addEventListener('DOMContentLoaded', () => {
+        document.body.prepend(warn);
+      });
+    }
+  </script>
 </head>
 <body>
   <div id="layout">
