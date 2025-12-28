@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+typer
+pydantic
+pydantic-settings
+python-dotenv
+requests
+pynacl
+pytest
+PyYAML
