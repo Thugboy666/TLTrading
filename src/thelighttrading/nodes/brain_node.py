@@ -1,9 +1,11 @@
 import json
 from pydantic import ValidationError
 from .base import BaseNode
+from .registry import register_node
 from ..protocols.schemas import Strategy
 
 
+@register_node("brain")
 class BrainNode(BaseNode):
     def __init__(self):
         super().__init__("brain", "BrainNode", "brain_mistral")

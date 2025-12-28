@@ -1,11 +1,16 @@
 import importlib
 import json
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
 from .graph import GraphSpec, NodeSpec, default_graph_spec
+from .registry import NodeRegistry
 from ..config.settings import get_settings
+from ..inputs.news_ingest import read_headlines_from_file
+from ..observability.metrics import metrics
 from ..policy import evaluate_strategy, PolicyDecision
 from ..protocols.reporting import build_execution_report, persist_report
 from ..protocols.schemas import Strategy
@@ -19,9 +24,15 @@ class Orchestrator:
     def _initialize_nodes(self, nodes: Dict[str, NodeSpec]):
         instances = {}
         for node_id, spec in nodes.items():
-            module_path, class_name = spec.class_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            node_cls = getattr(module, class_name)
+            node_cls = None
+            if spec.node_type:
+                node_cls = NodeRegistry.get(spec.node_type)
+            if not node_cls and spec.class_path:
+                module_path, class_name = spec.class_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                node_cls = getattr(module, class_name)
+            if not node_cls:
+                raise ValueError(f"Node {node_id} not found in registry or class path")
             instance = node_cls()
             if hasattr(instance, "profile") and spec.profile:
                 instance.profile = spec.profile
@@ -47,9 +58,29 @@ class Orchestrator:
                     queue.append(neighbor)
         return order
 
-    def _build_messages(self, node_id: str, outputs: Dict[str, dict], headlines: str | None):
+    def _resolve_headlines(self, headlines: str | list[str] | None, headlines_path: str | None = None) -> list[str]:
+        if headlines_path:
+            inputs_dir = Path(get_settings().data_dir) / "inputs"
+            requested = (inputs_dir / headlines_path).resolve()
+            if inputs_dir.resolve() not in requested.parents and requested != inputs_dir.resolve():
+                raise ValueError("invalid_headlines_path")
+            if inputs_dir.resolve() != requested.parent and inputs_dir.resolve() != requested:
+                raise ValueError("invalid_headlines_path")
+            return read_headlines_from_file(requested)
+
+        if isinstance(headlines, list):
+            return [str(h).strip() for h in headlines if str(h).strip()][:50]
+        if isinstance(headlines, str) and headlines:
+            return [headlines]
+
+        inputs_dir = Path(get_settings().data_dir) / "inputs"
+        default_path = inputs_dir / "headlines.txt"
+        return read_headlines_from_file(default_path)
+
+    def _build_messages(self, node_id: str, outputs: Dict[str, dict], headlines: list[str] | None):
         if node_id == "news":
-            return [{"role": "user", "content": headlines or "Mock headlines"}]
+            content = "\n".join(headlines or []) or "Mock headlines"
+            return [{"role": "user", "content": content}]
         if node_id == "parser":
             return [
                 {"role": "system", "content": "Parse summary"},
@@ -80,13 +111,21 @@ class Orchestrator:
             "output": decision_payload,
         }
 
-    def run_pipeline(self, headlines: str | None = None) -> dict:
-        run_id = str(int(time.time()))
+    def _new_run_id(self) -> str:
+        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        short_uuid = uuid.uuid4().hex[:8]
+        return f"run_{ts}_{short_uuid}"
+
+    def run_pipeline(self, headlines: str | list[str] | None = None, headlines_path: str | None = None) -> dict:
+        run_id = self._new_run_id()
         created_at = time.time()
         outputs: Dict[str, dict] = {}
         run_nodes: List[dict] = []
         status_summary = "ok"
         policy_decision: PolicyDecision | None = None
+        metrics.runs_total += 1
+
+        resolved_headlines = self._resolve_headlines(headlines, headlines_path)
 
         order = self._topological_order()
         stop_due_to_error = False
@@ -144,8 +183,9 @@ class Orchestrator:
                         }
                     )
                 else:
-                    messages = self._build_messages(node_id, outputs, headlines)
+                    messages = self._build_messages(node_id, outputs, resolved_headlines)
                     result = self.nodes[node_id].run(messages)
+                    metrics.llm_calls_total += 1
                     outputs[node_id] = result.output
                     run_nodes.append(
                         {
@@ -215,14 +255,29 @@ class Orchestrator:
             "policy_decision": policy_decision.__dict__ if policy_decision else None,
         }
 
-        state_dir = Path(get_settings().data_dir) / "state" / "runs"
+        if status_summary == "ok":
+            metrics.runs_ok += 1
+        if status_summary == "blocked":
+            metrics.runs_blocked += 1
+
+        data_root = Path(get_settings().data_dir)
+        state_dir = data_root / "state" / "runs"
         state_dir.mkdir(parents=True, exist_ok=True)
         with (state_dir / f"{run_id}.json").open("w", encoding="utf-8") as f:
             json.dump(run_record, f, indent=2)
-        with (Path(get_settings().data_dir) / "state" / "last_run.txt").open("w", encoding="utf-8") as f:
+        state_root = data_root / "state"
+        state_root.mkdir(parents=True, exist_ok=True)
+        with (state_root / "last_run.txt").open("w", encoding="utf-8") as f:
             f.write(run_id)
 
         report = build_execution_report(run_record)
         persist_report(run_id, report)
+
+        with (state_root / "last_packet.json").open("w", encoding="utf-8") as f:
+            json.dump(packet_output, f, indent=2)
+        with (state_root / "last_report.json").open("w", encoding="utf-8") as f:
+            json.dump(report.model_dump(), f, indent=2)
+        with (state_root / "last_run.json").open("w", encoding="utf-8") as f:
+            json.dump(run_record, f, indent=2)
 
         return run_record

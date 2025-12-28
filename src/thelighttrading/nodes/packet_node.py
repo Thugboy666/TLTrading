@@ -1,6 +1,7 @@
 import time
 import uuid
 from .base import NodeResult
+from .registry import register_node
 from ..protocols.schemas import ActionPacket, IntentItem
 from ..protocols.signing import compute_hash, sign_packet, derive_public_key
 from ..protocols.validators import (
@@ -14,6 +15,7 @@ from ..config.settings import get_settings
 from ..policy import compute_policy_hash, PolicyDecision
 
 
+@register_node("packet")
 class PacketNode:
     def __init__(self):
         self.id = "packet"

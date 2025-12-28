@@ -1,9 +1,11 @@
 import json
 from pydantic import ValidationError
 from .base import BaseNode
+from .registry import register_node
 from ..protocols.schemas import WatchdogDecision
 
 
+@register_node("watchdog")
 class WatchdogNode(BaseNode):
     def __init__(self):
         super().__init__("watchdog", "WatchdogNode", "watchdog_phi")

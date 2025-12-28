@@ -15,10 +15,19 @@ Write-Host "[setup] Installing requirements..."
 & python -m pip install -r requirements.txt
 & python -m pip install -e .
 
-$paths = @("data/state", "data/memory", "data/action_packets", "logs", "gui", "models")
+$paths = @("data/state", "data/memory", "data/action_packets", "data/inputs", "logs", "gui", "models")
 foreach ($p in $paths) {
     if (-Not (Test-Path $p)) { New-Item -ItemType Directory -Force -Path $p | Out-Null }
 }
+
+# sample inputs
+$sampleHeadlines = @(
+    "Breaking: Contoso beats earnings expectations",
+    "Fabrikam announces new product line",
+    "Northwind shares rise on merger rumors"
+)
+$sampleHeadlines -join "`n" | Out-File -FilePath "data/inputs/headlines.txt" -Encoding utf8 -Force
+
 
 # placeholders
 "" | Out-File -FilePath "logs/api.log" -Encoding utf8 -Force
