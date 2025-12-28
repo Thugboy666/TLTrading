@@ -1,2 +1,2 @@
 . .\.venv\Scripts\Activate.ps1
-& python -m thelighttrading.cli.main run-api
+& python -m uvicorn thelighttrading.api.server:app --host $env:APP_HOST --port $env:APP_PORT

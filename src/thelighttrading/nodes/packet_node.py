@@ -26,8 +26,8 @@ class PacketNode:
             intents=intents if not watchdog_output.get("block") else [],
         )
 
-        packet_dict = packet.model_dump()
-        packet_hash = compute_hash(packet_dict)
+        packet_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key", "hash"}}
+        packet_hash = compute_hash(packet_body)
         packet.hash = packet_hash
 
         private_key = settings.packet_signing_private_key_base64 or None
@@ -38,11 +38,12 @@ class PacketNode:
             packet.public_key = public_key
             return packet
 
+        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key"}}
+
         if private_key:
-            signature, pk_b64 = sign_packet(packet_dict, private_key)
+            signature, pk_b64 = sign_packet(signing_body, private_key)
             packet.signature = signature
             packet.public_key = public_key or pk_b64
-            packet.hash = packet_hash
             self._validate(packet)
         else:
             packet.signature = None
@@ -52,9 +53,10 @@ class PacketNode:
     def _validate(self, packet: ActionPacket) -> None:
         validate_expiry(packet.expires_at)
         validate_policy_hash(packet.policy_hash)
+        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key"}}
         validate_signature(
-            {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key"}},
+            signing_body,
             packet.signature,
             packet.public_key,
         )
-        validate_replay(packet.device_id, packet.sequence, packet.nonce)
+        validate_replay(packet.device_id, packet.sequence, packet.nonce, update=False)

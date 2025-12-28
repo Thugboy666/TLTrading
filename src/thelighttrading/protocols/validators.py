@@ -1,7 +1,7 @@
 import time
 from typing import Optional
 from .signing import verify_signature, compute_hash
-from ..memory.replay_state import check_and_update
+from ..memory.replay_state import check_and_update, load_state
 from ..config.settings import get_settings
 
 
@@ -30,7 +30,17 @@ def validate_signature(packet_body: dict, signature: Optional[str], public_key: 
         raise ValidationError("Bad signature")
 
 
-def validate_replay(device_id: str, sequence: int, nonce: str) -> None:
-    ok = check_and_update(device_id, sequence, nonce)
-    if not ok:
+def validate_replay(device_id: str, sequence: int, nonce: str, update: bool = True) -> None:
+    if update:
+        ok = check_and_update(device_id, sequence, nonce)
+        if not ok:
+            raise ValidationError("Replay detected")
+        return
+
+    state = load_state()
+    device_state = state.get(device_id, {"last_sequence": 0, "nonces": []})
+    last_sequence = device_state.get("last_sequence", 0)
+    nonces = device_state.get("nonces", [])
+
+    if nonce in nonces or sequence <= last_sequence:
         raise ValidationError("Replay detected")
