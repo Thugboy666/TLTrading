@@ -13,6 +13,7 @@ $envPath = Join-Path ".venv" "Scripts\Activate.ps1"
 Write-Host "[setup] Installing requirements..."
 & python -m pip install --upgrade pip
 & python -m pip install -r requirements.txt
+& python -m pip install -e .
 
 $paths = @("data/state", "data/memory", "data/action_packets", "logs", "gui", "models")
 foreach ($p in $paths) {
