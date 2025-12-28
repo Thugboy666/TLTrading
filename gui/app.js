@@ -1,4 +1,5 @@
 const canvasContainer = document.getElementById('canvas-container');
+const overlayEl = document.getElementById('overlay');
 const outputEl = document.getElementById('output');
 const statusEl = document.getElementById('status');
 const runBtn = document.getElementById('run-btn');
@@ -13,14 +14,37 @@ const nodes = [
 
 let lastRun = null;
 
+function setOverlay(message) {
+  if (!overlayEl) return;
+  overlayEl.innerHTML = message;
+  overlayEl.style.display = 'block';
+}
+
 function initScene() {
-  const width = canvasContainer.clientWidth;
-  const height = canvasContainer.clientHeight;
+  if (!window.THREE) {
+    const list = nodes.map(n => `<li>${n.label}</li>`).join('');
+    setOverlay(`Three.js not loaded (offline/CDN blocked).<br/>Static nodes:<ul>${list}</ul>`);
+    return;
+  }
+
+  const rect = canvasContainer.getBoundingClientRect();
+  let width = Math.floor(rect.width);
+  let height = Math.floor(rect.height);
+  if (!width) width = 800;
+  if (!height) height = 600;
+
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000);
+  camera.position.z = 6;
+
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
   renderer.setSize(width, height);
   canvasContainer.appendChild(renderer.domElement);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+  const gridHelper = new THREE.GridHelper(20, 20);
+  scene.add(gridHelper);
 
   const geometry = new THREE.SphereGeometry(0.4, 32, 32);
   const materials = [
@@ -40,8 +64,6 @@ function initScene() {
   });
   scene.add(group);
 
-  camera.position.z = 6;
-
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
   function onClick(event) {
@@ -52,10 +74,25 @@ function initScene() {
     const intersects = raycaster.intersectObjects(group.children);
     if (intersects.length > 0) {
       const nodeId = intersects[0].object.userData.id;
+      setOverlay(`Selected node: ${nodeId}`);
       showNodeOutput(nodeId);
+    } else {
+      setOverlay('Clicked empty space');
     }
   }
   renderer.domElement.addEventListener('click', onClick);
+
+  function onResize() {
+    const rect = canvasContainer.getBoundingClientRect();
+    let newWidth = Math.floor(rect.width);
+    let newHeight = Math.floor(rect.height);
+    if (!newWidth) newWidth = 800;
+    if (!newHeight) newHeight = 600;
+    camera.aspect = newWidth / newHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(newWidth, newHeight);
+  }
+  window.addEventListener('resize', onResize);
 
   function animate() {
     requestAnimationFrame(animate);
@@ -63,6 +100,8 @@ function initScene() {
     renderer.render(scene, camera);
   }
   animate();
+
+  setOverlay('Three.js loaded. Rendering scene.');
 }
 
 async function runPipeline() {
@@ -99,4 +138,9 @@ runBtn.addEventListener('click', async () => {
   await runPipeline();
 });
 
-initScene();
+try {
+  initScene();
+} catch (err) {
+  console.error(err);
+  setOverlay(`Error initializing scene: ${err.message || err}`);
+}
