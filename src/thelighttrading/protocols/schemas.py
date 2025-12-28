@@ -1,6 +1,12 @@
 from __future__ import annotations
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+class IntentItem(BaseModel):
+    ticker: str
+    direction: str
+    size: float
 
 
 class ActionPacket(BaseModel):
@@ -12,10 +18,17 @@ class ActionPacket(BaseModel):
     sequence: int
     device_id: str
     policy_hash: str
-    intents: List[dict] = Field(default_factory=list)
+    intents: List[IntentItem] = Field(default_factory=list)
     hash: Optional[str] = None
     signature: Optional[str] = None
     public_key: Optional[str] = None
+
+    @field_validator("intents", mode="before")
+    @classmethod
+    def _coerce_intents(cls, value):
+        if value is None:
+            return []
+        return value
 
 
 class NewsBrief(BaseModel):
@@ -54,7 +67,12 @@ class WatchdogDecision(BaseModel):
 
 class ExecutionReport(BaseModel):
     report_version: str = "v1"
+    run_id: str
     packet_id: str
-    executed_at: float
+    created_at: float
     status: str
-    details: dict
+    node_statuses: List[dict] = Field(default_factory=list)
+    packet_hash: Optional[str] = None
+    report_hash: Optional[str] = None
+    signature: Optional[str] = None
+    public_key: Optional[str] = None

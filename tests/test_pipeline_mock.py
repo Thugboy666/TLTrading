@@ -7,6 +7,7 @@ from thelighttrading.protocols.validators import validate_signature, validate_po
 from thelighttrading.protocols.signing import compute_hash
 from thelighttrading.config.settings import get_settings
 from thelighttrading.memory.replay_state import save_state
+from thelighttrading.policy import compute_policy_hash
 
 
 def test_pipeline_mock_mode(monkeypatch, tmp_path):
@@ -20,7 +21,7 @@ def test_pipeline_mock_mode(monkeypatch, tmp_path):
     run = orch.run_pipeline("mock news")
     packet = run["packet"]
 
-    assert packet["policy_hash"] == compute_hash({"policy_text": get_settings().policy_text})
+    assert packet["policy_hash"] == compute_policy_hash()
     assert "nonce" in packet and "sequence" in packet and "expires_at" in packet
 
 

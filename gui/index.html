@@ -13,7 +13,15 @@
     </div>
     <div id="side-panel">
       <h2>Pipeline</h2>
-      <button id="run-btn">Run Pipeline</button>
+      <div class="status-row">
+        <span id="mode-indicator">Mode: unknown</span>
+        <button id="refresh-status">Refresh</button>
+      </div>
+      <div class="actions">
+        <button id="run-btn">Run Pipeline</button>
+        <button id="execute-btn">Execute Last</button>
+        <button id="report-btn">Show Report</button>
+      </div>
       <div id="status"></div>
       <h3>Node Output</h3>
       <pre id="output">Select a node</pre>
