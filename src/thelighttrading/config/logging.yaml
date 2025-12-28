@@ -1,0 +1,40 @@
+version: 1
+formatters:
+  simple:
+    format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    level: INFO
+  api_file:
+    class: logging.FileHandler
+    formatter: simple
+    filename: logs/api.log
+    level: INFO
+  router_file:
+    class: logging.FileHandler
+    formatter: simple
+    filename: logs/router.log
+    level: INFO
+  nodes_file:
+    class: logging.FileHandler
+    formatter: simple
+    filename: logs/nodes.log
+    level: INFO
+loggers:
+  thelighttrading.api:
+    handlers: [console, api_file]
+    level: INFO
+    propagate: False
+  thelighttrading.llm_router:
+    handlers: [console, router_file]
+    level: INFO
+    propagate: False
+  thelighttrading.nodes:
+    handlers: [console, nodes_file]
+    level: INFO
+    propagate: False
+root:
+  handlers: [console]
+  level: WARNING

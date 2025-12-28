@@ -1,0 +1,9 @@
+body { margin: 0; font-family: Arial, sans-serif; background: #0b1021; color: #e8ecf1; }
+#layout { display: flex; height: 100vh; }
+#canvas-container { flex: 3; }
+#side-panel { flex: 1; background: #11162a; padding: 16px; box-sizing: border-box; overflow-y: auto; }
+button { padding: 10px 16px; margin-bottom: 12px; background: #2e7dff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+button:hover { background: #1f5dcc; }
+pre { background: #0d1224; padding: 12px; border-radius: 6px; }
+.node-label { color: #e8ecf1; font-size: 14px; text-align: center; margin-top: 4px; }
+#status { margin: 8px 0 16px; font-size: 14px; }
