@@ -26,10 +26,18 @@ function hideOverlay() {
   overlayEl.style.display = 'none';
 }
 
+function makeMaterial(index) {
+  const colors = [0x4caf50, 0x2196f3, 0xff9800, 0xf44336, 0x9c27b0];
+  return new THREE.MeshBasicMaterial({ color: colors[index % colors.length] });
+}
+
 function initScene() {
   try {
     if (!window.THREE || !THREE.WebGLRenderer || !THREE.Scene || !THREE.PerspectiveCamera) {
-      setOverlay('Three.js not loaded correctly (local vendor missing).');
+      const msg = 'Three.js not loaded correctly (local vendor missing).';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -40,7 +48,10 @@ function initScene() {
     if (!height) height = 600;
 
     if (!THREE.Mesh || !THREE.SphereGeometry || !THREE.MeshBasicMaterial || !THREE.Group || !THREE.Raycaster || !THREE.Vector2) {
-      setOverlay('Three.js not loaded correctly (local vendor missing).');
+      const msg = 'Three.js not loaded correctly (local vendor missing).';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -52,11 +63,16 @@ function initScene() {
     if (typeof renderer.setPixelRatio === 'function') {
       renderer.setPixelRatio(window.devicePixelRatio || 1);
     }
-    renderer.setSize(width, height);
+    if (typeof renderer.setSize === 'function') {
+      renderer.setSize(width, height, false);
+    }
     canvasContainer.appendChild(renderer.domElement);
 
     if (typeof renderer.render !== 'function') {
-      setOverlay('Three.js renderer is invalid or incomplete. WebGL not available.');
+      const msg = 'Three.js renderer is invalid or incomplete. WebGL not available.';
+      setOverlay(msg);
+      statusEl.textContent = msg;
+      outputEl.textContent = msg;
       return;
     }
 
@@ -70,51 +86,78 @@ function initScene() {
     originSphere.position.set(0, 0, 0);
     scene.add(originSphere);
 
-    const geometry = new THREE.SphereGeometry(0.4, 32, 32);
-    const materials = [
-      new THREE.MeshBasicMaterial({ color: 0x4caf50 }),
-      new THREE.MeshBasicMaterial({ color: 0x2196f3 }),
-      new THREE.MeshBasicMaterial({ color: 0xff9800 }),
-      new THREE.MeshBasicMaterial({ color: 0xf44336 }),
-      new THREE.MeshBasicMaterial({ color: 0x9c27b0 }),
-    ];
+    const geometry = new THREE.SphereGeometry(0.5, 32, 32);
 
     const group = new THREE.Group();
+    const nodeMeshes = [];
+    let selectedMesh = null;
+    let selectedNodeId = null;
     nodes.forEach((n, idx) => {
-      const mesh = new THREE.Mesh(geometry, materials[idx % materials.length]);
+      const mesh = new THREE.Mesh(geometry, makeMaterial(idx));
       mesh.position.x = (idx - 2) * 2;
       mesh.userData = { id: n.id };
       group.add(mesh);
+      nodeMeshes.push(mesh);
     });
     scene.add(group);
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-    function onClick(event) {
+
+    const debugOverlay = document.createElement('div');
+    debugOverlay.style.position = 'fixed';
+    debugOverlay.style.top = '8px';
+    debugOverlay.style.left = '8px';
+    debugOverlay.style.padding = '4px 6px';
+    debugOverlay.style.background = 'rgba(0,0,0,0.6)';
+    debugOverlay.style.color = '#fff';
+    debugOverlay.style.fontSize = '11px';
+    debugOverlay.style.fontFamily = 'monospace';
+    debugOverlay.style.borderRadius = '4px';
+    debugOverlay.style.pointerEvents = 'none';
+    debugOverlay.textContent = 'NDC: -, Intersects: 0, Hit: -';
+    document.body.appendChild(debugOverlay);
+
+    function updateSelection(mesh) {
+      if (selectedMesh && selectedMesh.material) {
+        selectedMesh.material.wireframe = false;
+      }
+      selectedMesh = mesh;
+      if (selectedMesh && selectedMesh.material) {
+        selectedMesh.material.wireframe = true;
+      }
+    }
+
+    function onPointerDown(event) {
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(group.children);
+      const intersects = raycaster.intersectObjects(nodeMeshes, false);
+      let hitId = '-';
       if (intersects.length > 0) {
         const nodeId = intersects[0].object.userData.id;
-        setOverlay(`Selected node: ${nodeId}`);
+        hitId = nodeId;
+        selectedNodeId = nodeId;
+        updateSelection(intersects[0].object);
+        outputEl.textContent = `Selected node: ${nodeId}`;
         showNodeOutput(nodeId);
-      } else {
-        setOverlay('Clicked empty space');
       }
+      const ndcText = `NDC: ${mouse.x.toFixed(3)}, ${mouse.y.toFixed(3)}`;
+      debugOverlay.textContent = `${ndcText} | Intersects: ${intersects.length} | Hit: ${hitId}`;
     }
-    renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
 
     function onResize() {
-      const rect = canvasContainer.getBoundingClientRect();
-      let newWidth = Math.floor(rect.width);
-      let newHeight = Math.floor(rect.height);
+      let newWidth = Math.floor(canvasContainer.clientWidth);
+      let newHeight = Math.floor(canvasContainer.clientHeight);
       if (!newWidth) newWidth = 800;
       if (!newHeight) newHeight = 600;
       camera.aspect = newWidth / newHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(newWidth, newHeight);
+      if (typeof renderer.setSize === 'function') {
+        renderer.setSize(newWidth, newHeight, false);
+      }
     }
     window.addEventListener('resize', onResize);
 
@@ -128,7 +171,10 @@ function initScene() {
     hideOverlay();
   } catch (err) {
     console.error(err);
-    setOverlay(`Error initializing scene: ${err.message || err}`);
+    const msg = `Error initializing scene: ${err.message || err}`;
+    setOverlay(msg);
+    statusEl.textContent = msg;
+    outputEl.textContent = msg;
   }
 }
 
@@ -170,5 +216,8 @@ try {
   initScene();
 } catch (err) {
   console.error(err);
-  setOverlay(`Error initializing scene: ${err.message || err}`);
+  const msg = `Error initializing scene: ${err.message || err}`;
+  setOverlay(msg);
+  statusEl.textContent = msg;
+  outputEl.textContent = msg;
 }
