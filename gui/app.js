@@ -28,9 +28,8 @@ function hideOverlay() {
 
 function initScene() {
   try {
-    if (!window.THREE) {
-      const list = nodes.map(n => `<li>${n.label}</li>`).join('');
-      setOverlay(`Three.js not loaded (offline/CDN blocked).<br/>Static nodes:<ul>${list}</ul>`);
+    if (!window.THREE || !THREE.WebGLRenderer || !THREE.Scene || !THREE.PerspectiveCamera) {
+      setOverlay('Three.js not loaded correctly (local vendor missing).');
       return;
     }
 
@@ -40,8 +39,8 @@ function initScene() {
     if (!width) width = 800;
     if (!height) height = 600;
 
-    if (!THREE.WebGLRenderer) {
-      setOverlay('Three.js renderer is invalid or incomplete. WebGL not available.');
+    if (!THREE.Mesh || !THREE.SphereGeometry || !THREE.MeshBasicMaterial || !THREE.Group || !THREE.Raycaster || !THREE.Vector2) {
+      setOverlay('Three.js not loaded correctly (local vendor missing).');
       return;
     }
 
@@ -61,7 +60,6 @@ function initScene() {
       return;
     }
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
     const gridHelper = new THREE.GridHelper(20, 20);
     scene.add(gridHelper);
 
