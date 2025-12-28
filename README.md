@@ -8,7 +8,7 @@ TheLightTrading is a Windows-first prototype for multi-LLM trading research. It 
 # one-time setup
 scripts\setup_windows.ps1
 
-# run API (localhost:8080) and GUI (served from the same port)
+# run API (defaults to http://127.0.0.1:8080) and GUI (served from the same port)
 scripts\run_api.ps1
 scripts\run_gui.ps1
 
@@ -35,7 +35,7 @@ Copy `.env.example` to `.env` and provide signing keys if you want signed Action
 Runs are stored under `data/state/runs/<run_id>.json`. Node memories persist in `data/memory/thelighttrading.db`.
 
 ## GUI
-Open `http://127.0.0.1:8080` to view the node graph and run the pipeline. The GUI communicates with the FastAPI backend and displays last node outputs.
+Open `http://127.0.0.1:8080` (the API port) to view the node graph and run the pipeline. The GUI communicates with the FastAPI backend and displays last node outputs.
 
 ## Tests
 Run `pytest` (defaults to mock LLM mode). CI enforces these tests.
