@@ -15,5 +15,7 @@ $baseUrl = "http://$env:APP_HOST`:$env:APP_PORT"
 Write-Host "UI: $baseUrl/"
 Write-Host "Docs: $baseUrl/docs"
 Write-Host "Status: $baseUrl/status"
+Write-Host "Metrics: $baseUrl/metrics"
+Write-Host "Inputs: $baseUrl/inputs/status"
 
 Start-Process $baseUrl/

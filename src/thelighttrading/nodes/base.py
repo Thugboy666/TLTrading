@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 from ..llm_router import router
 from ..memory.node_memory import remember
+from ..observability.metrics import metrics
 
 
 @dataclass
@@ -28,6 +29,7 @@ class BaseNode:
         raw = router.generate(self.profile, messages)
         output = self.postprocess(raw)
         ts_end = time.time()
+        metrics.observe_llm_latency(ts_end - ts_start)
         remember(self.id, "last", output, ts_end)
         return NodeResult(node_id=self.id, output=output, ts_start=ts_start, ts_end=ts_end)
 

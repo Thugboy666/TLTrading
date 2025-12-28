@@ -1,9 +1,11 @@
 import json
 from pydantic import ValidationError
 from .base import BaseNode
+from .registry import register_node
 from ..protocols.schemas import Signals
 
 
+@register_node("parser")
 class ParserNode(BaseNode):
     def __init__(self):
         super().__init__("parser", "ParserNode", "parser_qwen")

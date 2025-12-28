@@ -7,6 +7,7 @@ from ..config.settings import get_settings
 from ..execution import simulate_execute
 from ..llm_router.profiles import PROFILES
 from ..memory.node_memory import fetch_last_n, fetch_by_key
+from ..observability.metrics import metrics
 from ..protocols.reporting import build_execution_report, persist_report
 from ..protocols.schemas import ActionPacket
 
@@ -31,12 +32,34 @@ def status():
     }
 
 
+@router.get("/metrics")
+def get_metrics():
+    return metrics.snapshot()
+
+
+@router.get("/inputs/status")
+def get_inputs_status():
+    inputs_dir = Path(get_settings().data_dir) / "inputs"
+    files = []
+    if inputs_dir.exists():
+        for item in inputs_dir.iterdir():
+            if item.is_file():
+                files.append(item.name)
+    return {"files": sorted(files)}
+
+
 @router.post("/pipeline/run")
 def run_pipeline(payload: dict | None = None):
     headlines = None
+    headlines_path = None
     if payload and "headlines" in payload:
         headlines = payload["headlines"]
-    result = orch.run_pipeline(headlines)
+    if payload and "headlines_path" in payload:
+        headlines_path = payload["headlines_path"]
+    try:
+        result = orch.run_pipeline(headlines, headlines_path=headlines_path)
+    except ValueError as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc))
     return result
 
 
@@ -79,6 +102,7 @@ def execute_last_packet():
 
     packet = ActionPacket.model_validate(packet_data)
     result = simulate_execute(packet)
+    metrics.executions_total += 1
 
     _append_audit({"type": "execution", "run_id": run_id, "packet_id": packet.id, "status": result.get("status"), "ts": time.time()})
 
@@ -127,5 +151,6 @@ def _load_or_build_report(run_id: str) -> dict:
 def _append_audit(record: dict) -> None:
     log_path = Path(get_settings().log_dir) / "audit.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    sanitized = {k: v for k, v in record.items() if not k.lower().startswith("packet_signing_private")}
     with log_path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+        f.write(json.dumps(sanitized)[:400] + "\n")
