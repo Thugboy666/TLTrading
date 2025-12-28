@@ -9,3 +9,6 @@ pre { background: #0d1224; padding: 12px; border-radius: 6px; }
 .node-label { color: #e8ecf1; font-size: 14px; text-align: center; margin-top: 4px; }
 #status { margin: 8px 0 16px; font-size: 14px; }
 #overlay { position: absolute; top: 10px; left: 10px; padding: 8px 12px; background: rgba(0, 0, 0, 0.6); color: #fff; border-radius: 4px; max-width: 320px; pointer-events: none; font-size: 14px; }
+.status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.status-row span { font-weight: bold; font-size: 14px; }
+.actions { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }

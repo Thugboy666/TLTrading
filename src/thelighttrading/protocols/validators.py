@@ -1,12 +1,12 @@
 import time
 from typing import Optional
 from .signing import verify_signature, compute_hash
-from ..memory.replay_state import check_and_update, load_state
 import time
 from typing import Optional
-from ..config.settings import get_settings
-from .signing import compute_hash, verify_signature
+
+from .signing import verify_signature
 from ..memory.replay_state import check_and_update, load_state
+from ..policy import compute_policy_hash
 
 
 class ValidationError(Exception):
@@ -19,8 +19,7 @@ def validate_expiry(expires_at: float) -> None:
 
 
 def validate_policy_hash(packet_policy_hash: str) -> None:
-    settings = get_settings()
-    expected = compute_hash({"policy_text": settings.policy_text})
+    expected = compute_policy_hash()
     if packet_policy_hash != expected:
         raise ValidationError("Policy hash mismatch")
 

@@ -4,6 +4,10 @@ const overlayEl = document.getElementById('overlay');
 const outputEl = document.getElementById('output');
 const statusEl = document.getElementById('status');
 const runBtn = document.getElementById('run-btn');
+const executeBtn = document.getElementById('execute-btn');
+const reportBtn = document.getElementById('report-btn');
+const modeEl = document.getElementById('mode-indicator');
+const refreshStatusBtn = document.getElementById('refresh-status');
 
 const nodes = [
   { id: 'news', label: 'News' },
@@ -145,6 +149,43 @@ async function runPipeline() {
   }
 }
 
+async function executeLast() {
+  statusEl.textContent = 'Executing last packet...';
+  try {
+    const resp = await fetch('/execute/last', { method: 'POST' });
+    const data = await resp.json();
+    statusEl.textContent = `Execution status: ${data.result?.status || 'unknown'}`;
+    outputEl.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    statusEl.textContent = 'Error executing packet';
+  }
+}
+
+async function showReport() {
+  statusEl.textContent = 'Loading report...';
+  try {
+    const resp = await fetch('/report/last');
+    const data = await resp.json();
+    statusEl.textContent = 'Latest report loaded';
+    outputEl.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    statusEl.textContent = 'Error loading report';
+  }
+}
+
+async function refreshStatus() {
+  try {
+    const resp = await fetch('/status');
+    const data = await resp.json();
+    modeEl.textContent = `Mode: ${data.mode || 'unknown'}`;
+    if (data.last_run_id) {
+      statusEl.textContent = `Last run: ${data.last_run_id}`;
+    }
+  } catch (err) {
+    modeEl.textContent = 'Mode: unknown';
+  }
+}
+
 function initCanvas() {
   hideOverlay();
   drawGraph();
@@ -158,8 +199,21 @@ runBtn.addEventListener('click', async () => {
   drawGraph();
 });
 
+executeBtn.addEventListener('click', async () => {
+  await executeLast();
+});
+
+reportBtn.addEventListener('click', async () => {
+  await showReport();
+});
+
+refreshStatusBtn.addEventListener('click', async () => {
+  await refreshStatus();
+});
+
 try {
   initCanvas();
+  refreshStatus();
 } catch (err) {
   console.error(err);
   const msg = `Error initializing canvas: ${err.message || err}`;
