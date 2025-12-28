@@ -1,5 +1,7 @@
 import json
+from pydantic import ValidationError
 from .base import BaseNode
+from ..protocols.schemas import NewsBrief
 
 
 class NewsNode(BaseNode):
@@ -8,6 +10,8 @@ class NewsNode(BaseNode):
 
     def postprocess(self, raw: str):
         try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {"error": "invalid json", "raw": raw}
+            data = json.loads(raw)
+            model = NewsBrief.model_validate(data)
+            return model.model_dump()
+        except (json.JSONDecodeError, ValidationError):
+            return {"ticker": "", "sentiment": "unknown", "summary": "", "error": "invalid_news"}

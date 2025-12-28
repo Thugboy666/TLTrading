@@ -1,5 +1,7 @@
 import json
+from pydantic import ValidationError
 from .base import BaseNode
+from ..protocols.schemas import Strategy
 
 
 class BrainNode(BaseNode):
@@ -8,6 +10,8 @@ class BrainNode(BaseNode):
 
     def postprocess(self, raw: str):
         try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {"entries": [], "error": "invalid json", "raw": raw}
+            data = json.loads(raw)
+            model = Strategy.model_validate(data)
+            return model.model_dump()
+        except (json.JSONDecodeError, ValidationError):
+            return {"entries": [], "rationale": "", "horizon_minutes": 0, "error": "invalid_strategy"}

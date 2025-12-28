@@ -40,7 +40,7 @@ def test_pipeline_with_signing(monkeypatch, tmp_path):
     run = orch.run_pipeline("mock news")
     packet = run["packet"]
 
-    body = {k: v for k, v in packet.items() if k not in {"signature", "public_key"}}
+    body = {k: v for k, v in packet.items() if k not in {"signature", "public_key", "hash"}}
     validate_expiry(packet["expires_at"])
     validate_policy_hash(packet["policy_hash"])
     validate_signature(body, packet.get("signature"), packet.get("public_key"))

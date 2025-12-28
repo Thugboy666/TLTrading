@@ -7,6 +7,7 @@ from .brain_node import BrainNode
 from .watchdog_node import WatchdogNode
 from .packet_node import PacketNode
 from ..config.settings import get_settings
+from ..protocols.reporting import build_execution_report, persist_report
 
 
 class Orchestrator:
@@ -60,5 +61,8 @@ class Orchestrator:
             json.dump(run_record, f, indent=2)
         with (Path(get_settings().data_dir) / "state" / "last_run.txt").open("w", encoding="utf-8") as f:
             f.write(run_id)
+
+        report = build_execution_report(run_record)
+        persist_report(run_id, report)
 
         return run_record
