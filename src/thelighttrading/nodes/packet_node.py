@@ -38,7 +38,7 @@ class PacketNode:
             packet.public_key = public_key
             return packet
 
-        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key"}}
+        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key", "hash"}}
 
         if private_key:
             signature, pk_b64 = sign_packet(signing_body, private_key)
@@ -53,7 +53,7 @@ class PacketNode:
     def _validate(self, packet: ActionPacket) -> None:
         validate_expiry(packet.expires_at)
         validate_policy_hash(packet.policy_hash)
-        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key"}}
+        signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key", "hash"}}
         validate_signature(
             signing_body,
             packet.signature,

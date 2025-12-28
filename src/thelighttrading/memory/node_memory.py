@@ -45,3 +45,25 @@ def fetch_latest(node_id: str) -> dict | None:
     if not row:
         return None
     return json.loads(row[0])
+
+
+def fetch_last_n(node_id: str, n: int) -> list[dict]:
+    conn = _get_conn()
+    cur = conn.execute(
+        "SELECT value_json FROM node_memory WHERE node_id=? ORDER BY ts DESC LIMIT ?",
+        (node_id, n),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [json.loads(r[0]) for r in rows]
+
+
+def fetch_by_key(node_id: str, key: str, n: int = 10) -> list[dict]:
+    conn = _get_conn()
+    cur = conn.execute(
+        "SELECT value_json FROM node_memory WHERE node_id=? AND key=? ORDER BY ts DESC LIMIT ?",
+        (node_id, key, n),
+    )
+    rows = cur.fetchall()
+    conn.close()
+    return [json.loads(r[0]) for r in rows]

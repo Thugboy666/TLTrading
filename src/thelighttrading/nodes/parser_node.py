@@ -1,5 +1,7 @@
 import json
+from pydantic import ValidationError
 from .base import BaseNode
+from ..protocols.schemas import Signals
 
 
 class ParserNode(BaseNode):
@@ -9,8 +11,7 @@ class ParserNode(BaseNode):
     def postprocess(self, raw: str):
         try:
             data = json.loads(raw)
-            if "signals" not in data:
-                data["signals"] = []
-            return data
-        except json.JSONDecodeError:
-            return {"signals": [], "error": "invalid json", "raw": raw}
+            model = Signals.model_validate(data)
+            return model.model_dump()
+        except (json.JSONDecodeError, ValidationError):
+            return {"signals": [], "error": "invalid_signals"}

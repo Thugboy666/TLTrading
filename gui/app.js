@@ -1,18 +1,21 @@
 const canvasContainer = document.getElementById('canvas-container');
+const canvas = document.getElementById('graph');
 const overlayEl = document.getElementById('overlay');
 const outputEl = document.getElementById('output');
 const statusEl = document.getElementById('status');
 const runBtn = document.getElementById('run-btn');
 
 const nodes = [
-  { id: 'news', label: 'NewsNode' },
-  { id: 'parser', label: 'ParserNode' },
-  { id: 'brain', label: 'BrainNode' },
-  { id: 'watchdog', label: 'WatchdogNode' },
-  { id: 'packet', label: 'PacketNode' },
+  { id: 'news', label: 'News' },
+  { id: 'parser', label: 'Parser' },
+  { id: 'brain', label: 'Brain' },
+  { id: 'watchdog', label: 'Watchdog' },
+  { id: 'packet', label: 'Packet' },
 ];
 
 let lastRun = null;
+let selectedNodeId = null;
+let hoveredNodeId = null;
 
 function setOverlay(message) {
   if (!overlayEl) return;
@@ -26,156 +29,106 @@ function hideOverlay() {
   overlayEl.style.display = 'none';
 }
 
-function makeMaterial(index) {
-  const colors = [0x4caf50, 0x2196f3, 0xff9800, 0xf44336, 0x9c27b0];
-  return new THREE.MeshBasicMaterial({ color: colors[index % colors.length] });
+function layoutNodes(width, height) {
+  const padding = 80;
+  const usableWidth = width - padding * 2;
+  const spacing = usableWidth / (nodes.length - 1);
+  const y = height / 2;
+  return nodes.map((node, idx) => ({
+    ...node,
+    x: padding + spacing * idx,
+    y,
+    r: 26,
+  }));
 }
 
-function initScene() {
-  try {
-    if (!window.THREE || !THREE.WebGLRenderer || !THREE.Scene || !THREE.PerspectiveCamera) {
-      const msg = 'Three.js not loaded correctly (local vendor missing).';
-      setOverlay(msg);
-      statusEl.textContent = msg;
-      outputEl.textContent = msg;
-      return;
-    }
+function getCtx() {
+  const ctx = canvas.getContext('2d');
+  return ctx;
+}
 
-    const rect = canvasContainer.getBoundingClientRect();
-    let width = Math.floor(rect.width);
-    let height = Math.floor(rect.height);
-    if (!width) width = 800;
-    if (!height) height = 600;
-
-    if (!THREE.Mesh || !THREE.SphereGeometry || !THREE.MeshBasicMaterial || !THREE.Group || !THREE.Raycaster || !THREE.Vector2) {
-      const msg = 'Three.js not loaded correctly (local vendor missing).';
-      setOverlay(msg);
-      statusEl.textContent = msg;
-      outputEl.textContent = msg;
-      return;
-    }
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(70, width / height, 0.1, 1000);
-    camera.position.z = 6;
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    if (typeof renderer.setPixelRatio === 'function') {
-      renderer.setPixelRatio(window.devicePixelRatio || 1);
-    }
-    if (typeof renderer.setSize === 'function') {
-      renderer.setSize(width, height, false);
-    }
-    canvasContainer.appendChild(renderer.domElement);
-
-    if (typeof renderer.render !== 'function') {
-      const msg = 'Three.js renderer is invalid or incomplete. WebGL not available.';
-      setOverlay(msg);
-      statusEl.textContent = msg;
-      outputEl.textContent = msg;
-      return;
-    }
-
-    const gridHelper = new THREE.GridHelper(20, 20);
-    scene.add(gridHelper);
-
-    const originSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.5, 32, 32),
-      new THREE.MeshBasicMaterial({ color: 0xffffff })
-    );
-    originSphere.position.set(0, 0, 0);
-    scene.add(originSphere);
-
-    const geometry = new THREE.SphereGeometry(0.5, 32, 32);
-
-    const group = new THREE.Group();
-    const nodeMeshes = [];
-    let selectedMesh = null;
-    let selectedNodeId = null;
-    nodes.forEach((n, idx) => {
-      const mesh = new THREE.Mesh(geometry, makeMaterial(idx));
-      mesh.position.x = (idx - 2) * 2;
-      mesh.userData = { id: n.id };
-      group.add(mesh);
-      nodeMeshes.push(mesh);
-    });
-    scene.add(group);
-
-    const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
-
-    const debugOverlay = document.createElement('div');
-    debugOverlay.style.position = 'fixed';
-    debugOverlay.style.top = '8px';
-    debugOverlay.style.left = '8px';
-    debugOverlay.style.padding = '4px 6px';
-    debugOverlay.style.background = 'rgba(0,0,0,0.6)';
-    debugOverlay.style.color = '#fff';
-    debugOverlay.style.fontSize = '11px';
-    debugOverlay.style.fontFamily = 'monospace';
-    debugOverlay.style.borderRadius = '4px';
-    debugOverlay.style.pointerEvents = 'none';
-    debugOverlay.textContent = 'NDC: -, Intersects: 0, Hit: -';
-    document.body.appendChild(debugOverlay);
-
-    function updateSelection(mesh) {
-      if (selectedMesh && selectedMesh.material) {
-        selectedMesh.material.wireframe = false;
-      }
-      selectedMesh = mesh;
-      if (selectedMesh && selectedMesh.material) {
-        selectedMesh.material.wireframe = true;
-      }
-    }
-
-    function onPointerDown(event) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(nodeMeshes, false);
-      let hitId = '-';
-      if (intersects.length > 0) {
-        const nodeId = intersects[0].object.userData.id;
-        hitId = nodeId;
-        selectedNodeId = nodeId;
-        updateSelection(intersects[0].object);
-        outputEl.textContent = `Selected node: ${nodeId}`;
-        showNodeOutput(nodeId);
-      }
-      const ndcText = `NDC: ${mouse.x.toFixed(3)}, ${mouse.y.toFixed(3)}`;
-      debugOverlay.textContent = `${ndcText} | Intersects: ${intersects.length} | Hit: ${hitId}`;
-    }
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
-
-    function onResize() {
-      let newWidth = Math.floor(canvasContainer.clientWidth);
-      let newHeight = Math.floor(canvasContainer.clientHeight);
-      if (!newWidth) newWidth = 800;
-      if (!newHeight) newHeight = 600;
-      camera.aspect = newWidth / newHeight;
-      camera.updateProjectionMatrix();
-      if (typeof renderer.setSize === 'function') {
-        renderer.setSize(newWidth, newHeight, false);
-      }
-    }
-    window.addEventListener('resize', onResize);
-
-    function animate() {
-      requestAnimationFrame(animate);
-      group.rotation.y += 0.002;
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    hideOverlay();
-  } catch (err) {
-    console.error(err);
-    const msg = `Error initializing scene: ${err.message || err}`;
-    setOverlay(msg);
-    statusEl.textContent = msg;
-    outputEl.textContent = msg;
+function drawGraph() {
+  const rect = canvasContainer.getBoundingClientRect();
+  const width = Math.max(200, Math.floor(rect.width || 800));
+  const height = Math.max(200, Math.floor(rect.height || 600));
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = getCtx();
+  if (!ctx) {
+    setOverlay('Canvas not supported in this browser');
+    return;
   }
+  ctx.clearRect(0, 0, width, height);
+  const nodePositions = layoutNodes(width, height);
+
+  ctx.strokeStyle = '#2e7dff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < nodePositions.length - 1; i++) {
+    const a = nodePositions[i];
+    const b = nodePositions[i + 1];
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+
+  nodePositions.forEach((node) => {
+    const isSelected = node.id === selectedNodeId;
+    const isHovered = node.id === hoveredNodeId;
+    ctx.beginPath();
+    ctx.fillStyle = isSelected ? '#4caf50' : isHovered ? '#1f5dcc' : '#2196f3';
+    ctx.strokeStyle = '#0b1021';
+    ctx.lineWidth = isSelected ? 4 : 2;
+    ctx.arc(node.x, node.y, node.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#e8ecf1';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(node.label, node.x, node.y);
+  });
+
+  canvas.dataset.nodePositions = JSON.stringify(nodePositions);
+}
+
+function findNodeAt(x, y) {
+  const positions = JSON.parse(canvas.dataset.nodePositions || '[]');
+  return positions.find((node) => {
+    const dx = x - node.x;
+    const dy = y - node.y;
+    return Math.sqrt(dx * dx + dy * dy) <= node.r;
+  });
+}
+
+function showNodeOutput(nodeId) {
+  if (!lastRun) {
+    outputEl.textContent = 'No run yet.';
+    return;
+  }
+  if (nodeId === 'packet' && lastRun.packet) {
+    outputEl.textContent = JSON.stringify(lastRun.packet, null, 2);
+    return;
+  }
+  const entry = lastRun.nodes.find((n) => n.id === nodeId);
+  if (!entry) {
+    outputEl.textContent = 'No data for node';
+    return;
+  }
+  outputEl.textContent = JSON.stringify(entry.output, null, 2);
+}
+
+function handlePointer(event) {
+  const rect = canvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const hit = findNodeAt(x, y);
+  hoveredNodeId = hit ? hit.id : null;
+  if (event.type === 'pointerdown' && hit) {
+    selectedNodeId = hit.id;
+    showNodeOutput(selectedNodeId);
+  }
+  drawGraph();
 }
 
 async function runPipeline() {
@@ -184,39 +137,32 @@ async function runPipeline() {
     const resp = await fetch('/pipeline/run', { method: 'POST' });
     const data = await resp.json();
     lastRun = data;
+    selectedNodeId = 'packet';
+    showNodeOutput('packet');
     statusEl.textContent = `Run ${data.run_id} complete`;
   } catch (err) {
     statusEl.textContent = 'Error running pipeline';
   }
 }
 
-async function fetchRun(runId) {
-  const resp = await fetch(`/pipeline/run/${runId}`);
-  return resp.json();
-}
-
-function showNodeOutput(nodeId) {
-  if (!lastRun) {
-    outputEl.textContent = 'No run yet.';
-    return;
-  }
-  const entry = lastRun.nodes.find(n => n.id === nodeId);
-  if (!entry) {
-    outputEl.textContent = 'No data for node';
-    return;
-  }
-  outputEl.textContent = JSON.stringify(entry.output, null, 2);
+function initCanvas() {
+  hideOverlay();
+  drawGraph();
+  canvas.addEventListener('pointerdown', handlePointer);
+  canvas.addEventListener('pointermove', handlePointer);
+  window.addEventListener('resize', drawGraph);
 }
 
 runBtn.addEventListener('click', async () => {
   await runPipeline();
+  drawGraph();
 });
 
 try {
-  initScene();
+  initCanvas();
 } catch (err) {
   console.error(err);
-  const msg = `Error initializing scene: ${err.message || err}`;
+  const msg = `Error initializing canvas: ${err.message || err}`;
   setOverlay(msg);
   statusEl.textContent = msg;
   outputEl.textContent = msg;

@@ -1,5 +1,7 @@
 import json
+from pydantic import ValidationError
 from .base import BaseNode
+from ..protocols.schemas import WatchdogDecision
 
 
 class WatchdogNode(BaseNode):
@@ -9,8 +11,7 @@ class WatchdogNode(BaseNode):
     def postprocess(self, raw: str):
         try:
             data = json.loads(raw)
-            if "block" not in data:
-                data["block"] = True
-            return data
-        except json.JSONDecodeError:
-            return {"block": True, "reasons": ["invalid json"], "raw": raw}
+            model = WatchdogDecision.model_validate(data)
+            return model.model_dump()
+        except (json.JSONDecodeError, ValidationError):
+            return {"block": True, "reasons": ["invalid_watchdog"], "risk": "unknown", "error": "invalid_watchdog"}

@@ -7,7 +7,7 @@ from typing import List
 
 from .profiles import PROFILES
 from .mock_llm import mock_generate
-from .llama_http_client import post_completion
+from .llama_http_client import post_completion, is_server_available
 from ..config.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,16 @@ def generate(profile: str, messages: List[dict], temperature: float = 0.2, max_t
     if mode == "mock":
         response = mock_generate(profile, messages, temperature, max_tokens)
     else:
-        response = post_completion(messages, temperature=temperature, max_tokens=max_tokens)
+        if not is_server_available():
+            response = mock_generate(profile, messages, temperature, max_tokens)
+            audit_log(profile, "real_fallback", messages, response)
+            return response
+        try:
+            response = post_completion(messages, temperature=temperature, max_tokens=max_tokens)
+        except Exception:
+            response = mock_generate(profile, messages, temperature, max_tokens)
+            audit_log(profile, "real_fallback", messages, response)
+            return response
 
     audit_log(profile, mode, messages, response)
     return response
