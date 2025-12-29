@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from ..nodes.orchestrator import Orchestrator
 from ..config.settings import get_settings
 from ..execution import simulate_execute
+from ..protocols.signing import verify_signature
 from ..llm_router.profiles import PROFILES
 from ..memory.node_memory import fetch_last_n, fetch_by_key
 from ..observability.metrics import metrics
@@ -102,8 +103,12 @@ def execute_last_packet():
 
     packet = ActionPacket.model_validate(packet_data)
 
+    signing_body = {k: v for k, v in packet.model_dump().items() if k not in {"signature", "public_key", "hash"}}
+
     if packet.signature is None or not packet.public_key:
         result = {"status": "rejected_unsigned"}
+    elif not verify_signature(signing_body, packet.signature, packet.public_key):
+        result = {"status": "rejected_bad_signature"}
     else:
         result = simulate_execute(packet)
     metrics.executions_total += 1
