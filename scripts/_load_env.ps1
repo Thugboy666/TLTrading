@@ -1,5 +1,8 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$envFile = Join-Path $repoRoot ".env"
+$envFile = $env:DOTENV_PATH
+if (-not $envFile) {
+    $envFile = Join-Path $repoRoot "runtime/.env"
+}
 
 if (-Not (Test-Path -Path $envFile)) {
     return
