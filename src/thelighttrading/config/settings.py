@@ -1,7 +1,13 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
-from pathlib import Path
 import os
+from pathlib import Path
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[3]
 
 
 def _default_env_path() -> str | None:
@@ -9,7 +15,7 @@ def _default_env_path() -> str | None:
         return env_override
     if os.getenv("PYTEST_CURRENT_TEST"):
         return None
-    repo_root = Path(__file__).resolve().parents[3]
+    repo_root = _repo_root()
     return str(repo_root / "runtime" / ".env")
 
 
@@ -22,6 +28,11 @@ class Settings(BaseSettings):
     log_dir: str = "./logs"
     llm_mode: str = "mock"
     llm_base_url: str = "http://127.0.0.1:8081"
+    local_llm_server_url: str = "http://127.0.0.1:8081"
+    local_chat_model_default: str | None = None
+    local_chat_model_qwen: str | None = None
+    local_chat_model_mistral: str | None = None
+    local_embed_model: str | None = None
     packet_signing_private_key_base64: str | None = None
     packet_signing_public_key_base64: str | None = None
     packet_ttl_seconds: int = 120
@@ -30,6 +41,21 @@ class Settings(BaseSettings):
     replay_nonce_cache_size: int = 200
 
     model_config = SettingsConfigDict(env_file_encoding="utf-8", case_sensitive=False)
+
+    @field_validator(
+        "local_chat_model_default",
+        "local_chat_model_qwen",
+        "local_chat_model_mistral",
+        "local_embed_model",
+        mode="after",
+    )
+    def _resolve_model_paths(cls, value: str | None) -> str | None:
+        if not value:
+            return value
+        path = Path(value)
+        if not path.is_absolute():
+            path = _repo_root() / path
+        return str(path.resolve())
 
 
 @lru_cache(maxsize=1)
