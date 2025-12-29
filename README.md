@@ -12,7 +12,7 @@ scripts\setup_windows.ps1
 scripts\reset_runtime.ps1
 Copy-Item runtime/.env.example runtime/.env -ErrorAction SilentlyContinue
 
-# manually download llama.cpp server.exe into runtime/bin/llama
+# manually download llama.cpp (rpc-server.exe or server.exe) into runtime/bin/llama
 # place chat GGUF model under runtime/models/chat (for example chat.gguf)
 # optional: place embedding model under runtime/models/embed
 
@@ -48,7 +48,7 @@ See `docs/windows_runtime.md` for background start/stop helpers and additional n
 
 ```
 runtime/
-  bin/llama/       # place llama.cpp server.exe here (download manually)
+  bin/llama/       # copy the llama.cpp release folder here (rpc-server.exe or server.exe)
   models/chat/     # place chat GGUF models here
   models/embed/    # optional: embedding GGUF models
   logs/            # captured stdout/stderr for API and LLM servers
@@ -65,7 +65,7 @@ scripts\start_llm_bg.ps1
 scripts\start_api.ps1
 ```
 
-Models live under `runtime/models/chat` and `runtime/models/embed`. Point the env vars above at your GGUF filenames; relative paths are resolved from the repo root at runtime.
+Models live under `runtime/models/chat` and `runtime/models/embed`. Place the entire unpacked llama.cpp Windows release (including `rpc-server.exe` or `server.exe`) inside `runtime/bin/llama/` so the scripts can move with the repository without reconfiguration. Point the env vars above at your GGUF filenames; relative paths are resolved from the repo root at runtime.
 
 ## Modes
 - `LLM_MODE=mock` (default): deterministic mock outputs suitable for tests.
