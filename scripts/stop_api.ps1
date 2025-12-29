@@ -1,5 +1,6 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pidFile = Join-Path $repoRoot "runtime/api.pid"
+$statusFile = Join-Path $repoRoot "runtime/state/api.status.json"
 
 if (-Not (Test-Path $pidFile)) {
     Write-Warning "PID file not found at $pidFile. Nothing to stop."
@@ -51,5 +52,6 @@ try {
 }
 
 Remove-Item $pidFile -ErrorAction SilentlyContinue
+Remove-Item $statusFile -ErrorAction SilentlyContinue
 $global:LASTEXITCODE = 0
 return

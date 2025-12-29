@@ -4,7 +4,9 @@ param(
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $repoRoot "runtime"
+$stateDir = Join-Path $runtimeDir "state"
 $pidFile = Join-Path $runtimeDir "api.pid"
+$statusFile = Join-Path $stateDir "api.status.json"
 $envFile = Join-Path $runtimeDir ".env"
 $envExample = Join-Path $runtimeDir ".env.example"
 
@@ -30,7 +32,7 @@ if (Test-Path -Path $envFile) {
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
 Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
 
-foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), (Join-Path $runtimeDir "logs"))) {
+foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), (Join-Path $runtimeDir "logs"), $stateDir)) {
     if (-Not (Test-Path -Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
     }
@@ -82,6 +84,13 @@ if (-not $uvicornProcess) {
 }
 
 Set-Content -Path $pidFile -Value $uvicornProcess.Id
+$status = [ordered]@{
+    pid        = $uvicornProcess.Id
+    started_at = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    port       = [int]$env:APP_PORT
+    status     = "running"
+}
+$status | ConvertTo-Json | Set-Content -Path $statusFile
 Write-Output "API started with uvicorn PID $($uvicornProcess.Id)."
 $global:LASTEXITCODE = 0
 return
