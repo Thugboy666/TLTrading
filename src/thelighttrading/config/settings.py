@@ -29,9 +29,10 @@ class Settings(BaseSettings):
     policy_text: str = "default_safety_policy_v1"
     replay_nonce_cache_size: int = 200
 
-    model_config = SettingsConfigDict(env_file=_default_env_path(), env_file_encoding="utf-8", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file_encoding="utf-8", case_sensitive=False)
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    env_path = _default_env_path()
+    return Settings(_env_file=env_path if env_path else None)
