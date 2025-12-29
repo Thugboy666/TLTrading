@@ -101,7 +101,11 @@ def execute_last_packet():
         raise HTTPException(status_code=404, detail="no packet available")
 
     packet = ActionPacket.model_validate(packet_data)
-    result = simulate_execute(packet)
+
+    if packet.signature is None or not packet.public_key:
+        result = {"status": "rejected_unsigned"}
+    else:
+        result = simulate_execute(packet)
     metrics.executions_total += 1
 
     _append_audit({"type": "execution", "run_id": run_id, "packet_id": packet.id, "status": result.get("status"), "ts": time.time()})
