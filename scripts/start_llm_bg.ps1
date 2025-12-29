@@ -9,10 +9,13 @@ $runtimeDir = Join-Path $repoRoot "runtime"
 $binDir = Join-Path $runtimeDir "bin/llama"
 $logDir = Join-Path $runtimeDir "logs"
 $chatModelDir = Join-Path $runtimeDir "models/chat"
+$embedModelDir = Join-Path $runtimeDir "models/embed"
+$stateDir = Join-Path $runtimeDir "state"
 $pidFile = Join-Path $runtimeDir "llama.pid"
 $logFileOut = Join-Path $logDir "llama.out.log"
 $logFileErr = Join-Path $logDir "llama.err.log"
 $envFile = Join-Path $runtimeDir ".env"
+
 
 $envFileExists = Test-Path -Path $envFile
 if ($envFileExists) {
@@ -24,14 +27,14 @@ if ($envFileExists) {
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
 Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
 
-foreach ($dir in @($runtimeDir, $binDir, $logDir, $chatModelDir, (Join-Path $runtimeDir "models/embed"))) {
+foreach ($dir in @($runtimeDir, $binDir, $logDir, $chatModelDir, $embedModelDir, $stateDir)) {
     if (-not (Test-Path -Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
     }
 }
 
-if (-not (Test-Path -Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut -Force | Out-Null }
-if (-not (Test-Path -Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr -Force | Out-Null }
+if (-not (Test-Path -Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut | Out-Null }
+if (-not (Test-Path -Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr | Out-Null }
 
 if (Test-Path $pidFile) {
     $existingPidContent = Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue
@@ -51,7 +54,15 @@ if (Test-Path $pidFile) {
 
 . "$PSScriptRoot/_load_env.ps1"
 
-if (-not $PSBoundParameters.ContainsKey('Host') -and $env:LLM_BASE_URL) {
+if (-not $PSBoundParameters.ContainsKey('Host') -and $env:LOCAL_LLM_SERVER_URL) {
+    try {
+        $uri = [System.Uri]$env:LOCAL_LLM_SERVER_URL
+        if ($uri.Host) { $Host = $uri.Host }
+        if ($uri.Port -gt 0) { $Port = $uri.Port }
+    } catch {
+        # ignore malformed URI
+    }
+} elseif (-not $PSBoundParameters.ContainsKey('Host') -and $env:LLM_BASE_URL) {
     try {
         $uri = [System.Uri]$env:LLM_BASE_URL
         if ($uri.Host) { $Host = $uri.Host }
@@ -68,12 +79,24 @@ if (-not (Test-Path -Path $serverExe)) {
     return
 }
 
-if (-not $ModelPath -and $env:LLAMA_CHAT_MODEL) {
-    $ModelPath = $env:LLAMA_CHAT_MODEL
+if (-not $ModelPath) {
+    $modelCandidates = @()
+    if ($env:LOCAL_CHAT_MODEL_DEFAULT) { $modelCandidates += $env:LOCAL_CHAT_MODEL_DEFAULT }
+    if ($env:LOCAL_CHAT_MODEL_QWEN) { $modelCandidates += $env:LOCAL_CHAT_MODEL_QWEN }
+    if ($env:LOCAL_CHAT_MODEL_MISTRAL) { $modelCandidates += $env:LOCAL_CHAT_MODEL_MISTRAL }
+    if ($env:LLAMA_CHAT_MODEL) { $modelCandidates += $env:LLAMA_CHAT_MODEL }
+    foreach ($candidate in $modelCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -Path $candidate)) {
+            $ModelPath = $candidate
+            break
+        }
+    }
 }
 
 if (-not $ModelPath) {
-    $ModelPath = Join-Path $runtimeDir "models/chat/chat.gguf"
+    Write-Error "No chat model configured. Set LOCAL_CHAT_MODEL_DEFAULT (preferred), LOCAL_CHAT_MODEL_QWEN, or LOCAL_CHAT_MODEL_MISTRAL in runtime/.env."
+    $global:LASTEXITCODE = 1
+    return
 }
 
 if (-not (Test-Path -Path $ModelPath)) {

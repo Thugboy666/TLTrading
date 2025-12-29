@@ -23,6 +23,11 @@ if ($envFileExists) {
             "LOG_DIR=./logs",
             "LLM_MODE=mock",
             "LLM_BASE_URL=http://127.0.0.1:8081",
+            "LOCAL_LLM_SERVER_URL=http://127.0.0.1:8081",
+            "LOCAL_CHAT_MODEL_DEFAULT=./runtime/models/chat/chat.gguf",
+            "LOCAL_CHAT_MODEL_QWEN=",
+            "LOCAL_CHAT_MODEL_MISTRAL=",
+            "LOCAL_EMBED_MODEL=./runtime/models/embed/embed.gguf",
             "# PACKET_SIGNING_PRIVATE_KEY_BASE64=",
             "# PACKET_SIGNING_PUBLIC_KEY_BASE64="
         ) | Set-Content -Path $envExample
