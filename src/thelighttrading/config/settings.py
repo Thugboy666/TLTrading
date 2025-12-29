@@ -4,9 +4,11 @@ from pathlib import Path
 import os
 
 
-def _default_env_path() -> str:
+def _default_env_path() -> str | None:
     if env_override := os.getenv("DOTENV_PATH"):
         return env_override
+    if os.getenv("PYTEST_CURRENT_TEST"):
+        return None
     repo_root = Path(__file__).resolve().parents[3]
     return str(repo_root / "runtime" / ".env")
 
