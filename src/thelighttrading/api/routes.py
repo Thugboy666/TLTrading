@@ -18,7 +18,39 @@ orch = Orchestrator()
 
 @router.get("/health")
 def health():
-    return {"ok": True}
+    settings = get_settings()
+    repo_root = Path(__file__).resolve().parents[3]
+    state_dir = repo_root / "runtime" / "state"
+    status_path = state_dir / "api.status.json"
+    status_content = _load_json(status_path)
+
+    pid = None
+    uptime_seconds = 0
+    ok = False
+
+    if isinstance(status_content, dict):
+        status_pid = status_content.get("pid")
+        started_at = status_content.get("started_at")
+        status_flag = status_content.get("status")
+        if isinstance(status_pid, int) and isinstance(started_at, (int, float)) and status_flag == "running":
+            pid = status_pid
+            uptime_seconds = max(0, int(time.time() - started_at))
+            ok = True
+
+    last_run_path = state_dir / "last_run.json"
+    last_run = _load_json(last_run_path)
+
+    response = {
+        "ok": ok,
+        "pid": pid,
+        "uptime_seconds": uptime_seconds,
+        "llm_mode": settings.llm_mode,
+    }
+
+    if last_run is not None:
+        response["last_run"] = last_run
+
+    return response
 
 
 @router.get("/status")
@@ -129,6 +161,16 @@ def get_memory(node_id: str, n: int = 10):
 @router.get("/memory/node/{node_id}/key/{key}")
 def get_memory_by_key(node_id: str, key: str, n: int = 10):
     return fetch_by_key(node_id, key, n)
+
+
+def _load_json(path: Path):
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _get_last_run_id() -> str | None:
