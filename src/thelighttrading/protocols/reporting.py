@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 from .schemas import ExecutionReport
-from .signing import compute_hash, sign_packet
+from .signing import compute_hash, sign_packet, derive_public_key
 from ..config.settings import get_settings
 
 
@@ -34,6 +34,11 @@ def build_execution_report(run_record: dict, status_override: str | None = None)
 
     private_key = (settings.packet_signing_private_key_base64 or "").strip() or None
     public_key = (settings.packet_signing_public_key_base64 or "").strip() or None
+
+    if private_key and not public_key:
+        public_key = derive_public_key(private_key)
+    if not private_key:
+        public_key = None
 
     if private_key:
         signature, pk_b64 = sign_packet(body, private_key)

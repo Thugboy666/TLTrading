@@ -1,5 +1,14 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from pathlib import Path
+import os
+
+
+def _default_env_path() -> str:
+    if env_override := os.getenv("DOTENV_PATH"):
+        return env_override
+    repo_root = Path(__file__).resolve().parents[3]
+    return str(repo_root / "runtime" / ".env")
 
 
 class Settings(BaseSettings):
@@ -18,7 +27,7 @@ class Settings(BaseSettings):
     policy_text: str = "default_safety_policy_v1"
     replay_nonce_cache_size: int = 200
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=False)
+    model_config = SettingsConfigDict(env_file=_default_env_path(), env_file_encoding="utf-8", case_sensitive=False)
 
 
 @lru_cache(maxsize=1)

@@ -3,6 +3,7 @@ param(
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$env:DOTENV_PATH = Join-Path $repoRoot "runtime/.env"
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
