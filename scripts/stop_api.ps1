@@ -25,26 +25,26 @@ if (-not $isValidPid) {
     return
 }
 
-$pid = $parsedPid
-$process = Get-Process -Id $pid -ErrorAction SilentlyContinue
+$apiPid = $parsedPid
+$process = Get-Process -Id $apiPid -ErrorAction SilentlyContinue
 if (-not $process) {
-    Write-Warning "No process found with PID $pid. Cleaning up PID file."
+    Write-Warning "No process found with PID $apiPid. Cleaning up PID file."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 0
     return
 }
 
 if ($process.ProcessName -like "*powershell*") {
-    Write-Error "Refusing to stop PowerShell process with PID $pid. PID file may be stale."
+    Write-Error "Refusing to stop PowerShell process with PID $apiPid. PID file may be stale."
     $global:LASTEXITCODE = 1
     return
 }
 
 try {
-    Stop-Process -Id $pid -Force -ErrorAction Stop
-    Write-Output "Stopped API process with PID $pid."
+    Stop-Process -Id $apiPid -Force -ErrorAction Stop
+    Write-Output "Stopped API process with PID $apiPid."
 } catch {
-    $message = "Failed to stop process {0}: {1}" -f $pid, $_
+    $message = "Failed to stop process {0}: {1}" -f $apiPid, $_
     Write-Error $message
     $global:LASTEXITCODE = 1
     return
