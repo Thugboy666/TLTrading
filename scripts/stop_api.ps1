@@ -34,6 +34,12 @@ if (-not $process) {
     return
 }
 
+if ($process.ProcessName -like "*powershell*") {
+    Write-Error "Refusing to stop PowerShell process with PID $pid. PID file may be stale."
+    $global:LASTEXITCODE = 1
+    return
+}
+
 try {
     Stop-Process -Id $pid -Force -ErrorAction Stop
     Write-Output "Stopped API process with PID $pid."
