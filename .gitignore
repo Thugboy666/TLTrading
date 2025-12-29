@@ -9,3 +9,6 @@ data/
 logs/
 .DS_Store
 *.gguf
+# Allow committed runtime directories and placeholders
+!runtime/
+!runtime/**
