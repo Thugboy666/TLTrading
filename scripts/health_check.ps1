@@ -1,6 +1,24 @@
+param(
+    [switch]$CheckLlm
+)
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $pidFile = Join-Path $repoRoot "runtime/api.pid"
-$uri = "http://127.0.0.1:8080/health"
+$envFile = Join-Path $repoRoot "runtime/.env"
+
+if (Test-Path -Path $envFile) {
+    $env:DOTENV_PATH = $envFile
+} else {
+    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+}
+
+. "$PSScriptRoot/_load_env.ps1"
+
+if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
+if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
+if (-not $env:LLM_BASE_URL) { $env:LLM_BASE_URL = "http://127.0.0.1:8081" }
+
+$uri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
 
 $expectedPid = $null
 $pidFileMissing = $true
@@ -53,4 +71,15 @@ if ($expectedPid -and $health.pid -ne $expectedPid) {
 }
 
 Write-Output "OK: pid $($health.pid) uptime $($health.uptime_seconds)s mode $($health.llm_mode)"
+if ($CheckLlm) {
+    $trimmedBase = $env:LLM_BASE_URL.TrimEnd('/')
+    $llmHealth = "$trimmedBase/health"
+    try {
+        $llmResponse = Invoke-WebRequest -Uri $llmHealth -UseBasicParsing -ErrorAction Stop
+        Write-Output "LLM OK: $llmHealth status $($llmResponse.StatusCode)"
+    } catch {
+        Write-Output "LLM DOWN: unable to reach $llmHealth ($_ )"
+        exit 1
+    }
+}
 exit 0

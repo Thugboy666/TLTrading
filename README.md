@@ -12,12 +12,22 @@ scripts\setup_windows.ps1
 scripts\reset_runtime.ps1
 Copy-Item runtime/.env.example runtime/.env -ErrorAction SilentlyContinue
 
+# download llama.cpp server.exe into runtime/bin/llama (manual step)
+# place chat GGUF model under runtime/models/chat (for example chat.gguf)
+# optional: place embedding model under runtime/models/embed
+
+# start LLM server in background (defaults to http://127.0.0.1:8081)
+scripts\start_llm_bg.ps1 -ModelPath runtime/models/chat/chat.gguf
+
 # start API in background (defaults to http://127.0.0.1:8080) and check status
 scripts\start_api_bg.ps1
 scripts\status_check.ps1
+scripts\health_check.ps1 -CheckLlm
 
 # stop API when finished
 scripts\stop_api.ps1
+# stop LLM server when finished
+scripts\stop_llm.ps1
 
 # run GUI (served from the same API port)
 scripts\run_gui.ps1
@@ -32,6 +42,18 @@ scripts\smoke_test.ps1
 Copy `runtime/.env.example` to `runtime/.env` and provide signing keys if you want signed ActionPackets. Without keys, the system generates HOLD packets marked UNSIGNED.
 
 See `docs/windows_runtime.md` for background start/stop helpers and additional notes.
+
+## Local LLM runtime layout
+
+```
+runtime/
+  bin/llama/       # place llama.cpp server.exe here (download manually)
+  models/chat/     # place chat GGUF models here
+  models/embed/    # optional: embedding GGUF models
+  logs/            # captured stdout/stderr for API and LLM servers
+```
+
+The PowerShell scripts read `runtime/.env` when it exists and will not overwrite it. Update `LLM_MODE=real` and `LLM_BASE_URL=http://127.0.0.1:8081` after launching the llama.cpp server with `scripts/start_llm_bg.ps1`.
 
 ## Modes
 - `LLM_MODE=mock` (default): deterministic mock outputs suitable for tests.

@@ -9,8 +9,9 @@ $pidFile = Join-Path $runtimeDir "api.pid"
 $statusFile = Join-Path $stateDir "api.status.json"
 $envFile = Join-Path $runtimeDir ".env"
 $envExample = Join-Path $runtimeDir ".env.example"
+$envFileExists = Test-Path -Path $envFile
 
-if (Test-Path -Path $envFile) {
+if ($envFileExists) {
     $env:DOTENV_PATH = $envFile
 } else {
     Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
@@ -54,7 +55,11 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
 
-$env:DOTENV_PATH = Join-Path $runtimeDir ".env"
+if ($envFileExists) {
+    $env:DOTENV_PATH = $envFile
+} else {
+    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+}
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
