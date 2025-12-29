@@ -1,3 +1,7 @@
+Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
+Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64 -ErrorAction SilentlyContinue
+Write-Host "[step6] Signing env vars cleared for test session"
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 . "$PSScriptRoot/_load_env.ps1"
 
