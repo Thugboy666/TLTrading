@@ -8,18 +8,26 @@ TheLightTrading is a Windows-first prototype for multi-LLM trading research. It 
 # one-time setup
 scripts\setup_windows.ps1
 
+# prepare runtime env
+Copy-Item runtime/.env.example runtime/.env
+
 # run API (defaults to http://127.0.0.1:8080) and GUI (served from the same port)
-scripts\run_api.ps1
+scripts\start_api.ps1
 scripts\run_gui.ps1
 
 # run pipeline via CLI
 thelighttrading run-pipeline
 
+# health check
+scripts\health_check.ps1
+
 # run smoke tests
 scripts\smoke_test.ps1
 ```
 
-Copy `.env.example` to `.env` and provide signing keys if you want signed ActionPackets. Without keys, the system generates HOLD packets marked UNSIGNED.
+Copy `runtime/.env.example` to `runtime/.env` and provide signing keys if you want signed ActionPackets. Without keys, the system generates HOLD packets marked UNSIGNED.
+
+See `docs/windows_runtime.md` for background start/stop helpers and additional notes.
 
 ## Modes
 - `LLM_MODE=mock` (default): deterministic mock outputs suitable for tests.
