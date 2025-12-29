@@ -2,7 +2,8 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $repoRoot "runtime"
 $pidFile = Join-Path $runtimeDir "api.pid"
 $logDir = Join-Path $runtimeDir "logs"
-$logFile = Join-Path $logDir "uvicorn.log"
+$logFileOut = Join-Path $logDir "uvicorn.out.log"
+$logFileErr = Join-Path $logDir "uvicorn.err.log"
 $startScript = Join-Path $PSScriptRoot "start_api.ps1"
 $envFile = Join-Path $runtimeDir ".env"
 
@@ -21,7 +22,8 @@ foreach ($dir in @($runtimeDir, $logDir)) {
     }
 }
 
-New-Item -ItemType File -Path $logFile -Force | Out-Null
+New-Item -ItemType File -Path $logFileOut -Force | Out-Null
+New-Item -ItemType File -Path $logFileErr -Force | Out-Null
 
 if (Test-Path $pidFile) {
     try {
@@ -38,7 +40,7 @@ if (Test-Path $pidFile) {
     }
 }
 
-$process = Start-Process -FilePath "powershell" -ArgumentList @("-NoLogo", "-NoProfile", "-File", "`"$startScript`"") -WorkingDirectory $repoRoot -RedirectStandardOutput $logFile -RedirectStandardError $logFile -PassThru
+$process = Start-Process -FilePath "powershell" -ArgumentList @("-NoLogo", "-NoProfile", "-File", "`"$startScript`"") -WorkingDirectory $repoRoot -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr -PassThru
 
 if (-not $process) {
     Write-Error "Failed to start API in background."
@@ -46,4 +48,4 @@ if (-not $process) {
 }
 
 Set-Content -Path $pidFile -Value $process.Id
-Write-Output "API started in background with PID $($process.Id). Logs: $logFile"
+Write-Output "API started in background with PID $($process.Id). Logs: stdout -> $logFileOut, stderr -> $logFileErr"

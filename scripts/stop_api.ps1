@@ -21,14 +21,14 @@ if (-not $pid) {
 
 $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
 if (-not $process) {
-    Write-Warning "No process found with PID ${pid}. Cleaning up PID file."
+    Write-Warning "No process found with PID $pid. Cleaning up PID file."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
     exit 0
 }
 
 try {
     Stop-Process -Id $pid -Force -ErrorAction Stop
-    Write-Output "Stopped API process with PID ${pid}."
+    Write-Output "Stopped API process with PID $pid."
 } catch {
     $message = "Failed to stop process {0}: {1}" -f $pid, $_
     Write-Error $message
