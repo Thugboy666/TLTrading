@@ -1,11 +1,24 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $repoRoot "runtime"
 $pidFile = Join-Path $runtimeDir "api.pid"
-$logFile = Join-Path $repoRoot "logs/uvicorn.log"
+$logDir = Join-Path $runtimeDir "logs"
+$logFile = Join-Path $logDir "uvicorn.log"
 $startScript = Join-Path $PSScriptRoot "start_api.ps1"
+$envFile = Join-Path $runtimeDir ".env"
 
-if (-Not (Test-Path $runtimeDir)) {
-    New-Item -ItemType Directory -Path $runtimeDir | Out-Null
+if (Test-Path -Path $envFile) {
+    $env:DOTENV_PATH = $envFile
+} else {
+    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+}
+
+Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
+Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
+
+foreach ($dir in @($runtimeDir, $logDir)) {
+    if (-Not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir | Out-Null
+    }
 }
 
 if (Test-Path $pidFile) {
@@ -21,11 +34,6 @@ if (Test-Path $pidFile) {
     } catch {
         Write-Warning "Could not read existing PID file. It will be overwritten."
     }
-}
-
-$logDir = Split-Path $logFile -Parent
-if (-Not (Test-Path $logDir)) {
-    New-Item -ItemType Directory -Path $logDir | Out-Null
 }
 
 $process = Start-Process -FilePath "powershell" -ArgumentList @("-NoLogo", "-NoProfile", "-File", "`"$startScript`"") -WorkingDirectory $repoRoot -RedirectStandardOutput $logFile -RedirectStandardError $logFile -PassThru
