@@ -7,18 +7,22 @@ if (-Not (Test-Path $pidFile)) {
 }
 
 try {
-    $pid = Get-Content $pidFile -ErrorAction Stop
+    $pidContent = Get-Content -Path $pidFile -Raw -ErrorAction Stop
 } catch {
     Write-Warning "Could not read PID file."
     exit 1
 }
 
-if (-not $pid) {
-    Write-Warning "PID file is empty."
+$pidValue = $pidContent.Trim()
+$parsedPid = 0
+$isValidPid = [int]::TryParse($pidValue, [ref]$parsedPid)
+if (-not $isValidPid) {
+    Write-Warning "PID file is invalid. Removing it."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
     exit 1
 }
 
+$pid = $parsedPid
 $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
 if (-not $process) {
     Write-Warning "No process found with PID $pid. Cleaning up PID file."

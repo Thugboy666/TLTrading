@@ -22,9 +22,6 @@ foreach ($dir in @($runtimeDir, $logDir)) {
     }
 }
 
-New-Item -ItemType File -Path $logFileOut -Force | Out-Null
-New-Item -ItemType File -Path $logFileErr -Force | Out-Null
-
 if (Test-Path $pidFile) {
     try {
         $existingPid = Get-Content $pidFile -ErrorAction Stop
@@ -39,6 +36,9 @@ if (Test-Path $pidFile) {
         Write-Warning "Could not read existing PID file. It will be overwritten."
     }
 }
+
+if (!(Test-Path $logFileOut)) { "" | Out-File -FilePath $logFileOut -Encoding utf8 -Force }
+if (!(Test-Path $logFileErr)) { "" | Out-File -FilePath $logFileErr -Encoding utf8 -Force }
 
 $process = Start-Process -FilePath "powershell" -ArgumentList @("-NoLogo", "-NoProfile", "-File", "`"$startScript`"") -WorkingDirectory $repoRoot -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr -PassThru
 
