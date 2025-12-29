@@ -61,8 +61,10 @@ class PacketNode:
         packet_hash = compute_hash(packet_body)
         packet.hash = packet_hash
 
-        private_key = settings.packet_signing_private_key_base64 or None
-        public_key = settings.packet_signing_public_key_base64 or derive_public_key(private_key) if private_key else settings.packet_signing_public_key_base64
+        private_key = (settings.packet_signing_private_key_base64 or "").strip() or None
+        public_key = (settings.packet_signing_public_key_base64 or "").strip() or None
+        if private_key and not public_key:
+            public_key = derive_public_key(private_key)
 
         if final_block:
             packet.signature = None

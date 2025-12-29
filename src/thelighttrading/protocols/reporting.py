@@ -2,7 +2,7 @@ import json
 import time
 from pathlib import Path
 from .schemas import ExecutionReport
-from .signing import compute_hash, sign_packet, derive_public_key
+from .signing import compute_hash, sign_packet
 from ..config.settings import get_settings
 
 
@@ -33,21 +33,17 @@ def build_execution_report(run_record: dict, status_override: str | None = None)
     report.report_hash = compute_hash(body)
 
     private_key = (settings.packet_signing_private_key_base64 or "").strip() or None
-    # Derive the public key only from the current settings to avoid
-    # leaking state from previous runs.
-    public_key = (
-        settings.packet_signing_public_key_base64
-        if not private_key
-        else settings.packet_signing_public_key_base64 or derive_public_key(private_key)
-    )
+    public_key = (settings.packet_signing_public_key_base64 or "").strip() or None
 
     if private_key:
         signature, pk_b64 = sign_packet(body, private_key)
         report.signature = signature
         report.public_key = public_key or pk_b64
     else:
+        # If no private key is available we must not sign the report and
+        # we must not inherit any public key from previous runs.
         report.signature = None
-        report.public_key = public_key
+        report.public_key = public_key or None
     return report
 
 
