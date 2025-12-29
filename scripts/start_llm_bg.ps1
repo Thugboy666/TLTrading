@@ -72,9 +72,19 @@ if (-not $PSBoundParameters.ContainsKey('llmHost') -and $env:LOCAL_LLM_SERVER_UR
     }
 }
 
-$serverExe = Join-Path $binDir "server.exe"
-if (-not (Test-Path -Path $serverExe)) {
-    Write-Error "llama.cpp server.exe not found at $serverExe. Download the llama.cpp release and place the server binary there."
+$llmExe = $null
+$llmCandidates = @("rpc-server.exe", "server.exe")
+foreach ($exeName in $llmCandidates) {
+    $candidatePath = Join-Path $binDir $exeName
+    if (Test-Path -Path $candidatePath) {
+        $llmExe = $candidatePath
+        break
+    }
+}
+
+if (-not $llmExe) {
+    $expectedList = $llmCandidates -join ", "
+    Write-Error "llama.cpp server binary not found under $binDir. Expected one of: $expectedList. Copy the llama.cpp release folder into runtime/bin/llama/."
     $global:LASTEXITCODE = 1
     return
 }
@@ -107,7 +117,7 @@ if (-not (Test-Path -Path $ModelPath)) {
 
 $arguments = @("--host", $llmHost, "--port", $llmPort, "--log-disable", "-m", $ModelPath, "--embedding")
 
-$llamaProcess = Start-Process -FilePath $serverExe -ArgumentList $arguments -WorkingDirectory $binDir -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
+$llamaProcess = Start-Process -FilePath $llmExe -ArgumentList $arguments -WorkingDirectory $binDir -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
 
 if (-not $llamaProcess) {
     Write-Error "Failed to start llama.cpp server."
