@@ -8,18 +8,22 @@ TheLightTrading is a Windows-first prototype for multi-LLM trading research. It 
 # one-time setup
 scripts\setup_windows.ps1
 
-# prepare runtime env
-Copy-Item runtime/.env.example runtime/.env
+# bootstrap runtime (creates runtime/.env.example if missing)
+scripts\reset_runtime.ps1
+Copy-Item runtime/.env.example runtime/.env -ErrorAction SilentlyContinue
 
-# run API (defaults to http://127.0.0.1:8080) and GUI (served from the same port)
-scripts\start_api.ps1
+# start API in background (defaults to http://127.0.0.1:8080) and check status
+scripts\start_api_bg.ps1
+scripts\status_check.ps1
+
+# stop API when finished
+scripts\stop_api.ps1
+
+# run GUI (served from the same API port)
 scripts\run_gui.ps1
 
 # run pipeline via CLI
 thelighttrading run-pipeline
-
-# health check
-scripts\health_check.ps1
 
 # run smoke tests
 scripts\smoke_test.ps1
