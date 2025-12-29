@@ -26,12 +26,15 @@ def build_execution_report(run_record: dict, status_override: str | None = None)
     )
 
     # Always pull signing material from the current settings to avoid
-    # reusing stale environment configuration across runs.
+    # reusing stale environment configuration across runs. Never reuse
+    # any signing data from the run record itself.
     settings = get_settings()
     body = _report_body(report)
     report.report_hash = compute_hash(body)
 
-    private_key = settings.packet_signing_private_key_base64 or None
+    private_key = (settings.packet_signing_private_key_base64 or "").strip() or None
+    # Derive the public key only from the current settings to avoid
+    # leaking state from previous runs.
     public_key = (
         settings.packet_signing_public_key_base64
         if not private_key
