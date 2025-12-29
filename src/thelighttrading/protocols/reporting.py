@@ -25,12 +25,18 @@ def build_execution_report(run_record: dict, status_override: str | None = None)
         packet_hash=packet_hash,
     )
 
+    # Always pull signing material from the current settings to avoid
+    # reusing stale environment configuration across runs.
     settings = get_settings()
     body = _report_body(report)
     report.report_hash = compute_hash(body)
 
     private_key = settings.packet_signing_private_key_base64 or None
-    public_key = settings.packet_signing_public_key_base64 or derive_public_key(private_key) if private_key else settings.packet_signing_public_key_base64
+    public_key = (
+        settings.packet_signing_public_key_base64
+        if not private_key
+        else settings.packet_signing_public_key_base64 or derive_public_key(private_key)
+    )
 
     if private_key:
         signature, pk_b64 = sign_packet(body, private_key)
