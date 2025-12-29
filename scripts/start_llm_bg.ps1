@@ -1,7 +1,7 @@
 param(
     [string]$ModelPath,
-    [string]$Host = "127.0.0.1",
-    [int]$Port = 8081
+    [Alias('Host')][string]$llmHost = "127.0.0.1",
+    [Alias('Port')][int]$llmPort = 8081
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -54,19 +54,19 @@ if (Test-Path $pidFile) {
 
 . "$PSScriptRoot/_load_env.ps1"
 
-if (-not $PSBoundParameters.ContainsKey('Host') -and $env:LOCAL_LLM_SERVER_URL) {
+if (-not $PSBoundParameters.ContainsKey('llmHost') -and $env:LOCAL_LLM_SERVER_URL) {
     try {
         $uri = [System.Uri]$env:LOCAL_LLM_SERVER_URL
-        if ($uri.Host) { $Host = $uri.Host }
-        if ($uri.Port -gt 0) { $Port = $uri.Port }
+        if ($uri.Host) { $llmHost = $uri.Host }
+        if ($uri.Port -gt 0) { $llmPort = $uri.Port }
     } catch {
         # ignore malformed URI
     }
-} elseif (-not $PSBoundParameters.ContainsKey('Host') -and $env:LLM_BASE_URL) {
+} elseif (-not $PSBoundParameters.ContainsKey('llmHost') -and $env:LLM_BASE_URL) {
     try {
         $uri = [System.Uri]$env:LLM_BASE_URL
-        if ($uri.Host) { $Host = $uri.Host }
-        if ($uri.Port -gt 0) { $Port = $uri.Port }
+        if ($uri.Host) { $llmHost = $uri.Host }
+        if ($uri.Port -gt 0) { $llmPort = $uri.Port }
     } catch {
         # ignore malformed URI
     }
@@ -105,7 +105,7 @@ if (-not (Test-Path -Path $ModelPath)) {
     return
 }
 
-$arguments = @("--host", $Host, "--port", $Port, "--log-disable", "-m", $ModelPath, "--embedding")
+$arguments = @("--host", $llmHost, "--port", $llmPort, "--log-disable", "-m", $ModelPath, "--embedding")
 
 $llamaProcess = Start-Process -FilePath $serverExe -ArgumentList $arguments -WorkingDirectory $binDir -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
 
@@ -117,6 +117,6 @@ if (-not $llamaProcess) {
 
 $llmPid = $llamaProcess.Id
 Set-Content -Path $pidFile -Value $llmPid
-Write-Output "LLM server started with PID $llmPid (host $Host port $Port). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
+Write-Output "LLM server started with PID $llmPid (host $llmHost port $llmPort). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
 $global:LASTEXITCODE = 0
 return
