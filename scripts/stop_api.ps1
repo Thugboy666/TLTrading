@@ -30,7 +30,7 @@ try {
     Stop-Process -Id $pid -Force -ErrorAction Stop
     Write-Output "Stopped API process with PID $pid."
 } catch {
-    Write-Error "Failed to stop process $pid: $_"
+    Write-Error ("Failed to stop process {0}: {1}" -f $pid, $_)
     exit 1
 }
 
