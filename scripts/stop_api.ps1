@@ -3,14 +3,16 @@ $pidFile = Join-Path $repoRoot "runtime/api.pid"
 
 if (-Not (Test-Path $pidFile)) {
     Write-Warning "PID file not found at $pidFile. Nothing to stop."
-    exit 0
+    $global:LASTEXITCODE = 0
+    return
 }
 
 try {
     $pidContent = Get-Content -Path $pidFile -Raw -ErrorAction Stop
 } catch {
     Write-Warning "Could not read PID file."
-    exit 1
+    $global:LASTEXITCODE = 1
+    return
 }
 
 $pidValue = $pidContent.Trim()
@@ -19,7 +21,8 @@ $isValidPid = [int]::TryParse($pidValue, [ref]$parsedPid)
 if (-not $isValidPid) {
     Write-Warning "PID file is invalid. Removing it."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
-    exit 1
+    $global:LASTEXITCODE = 1
+    return
 }
 
 $pid = $parsedPid
@@ -27,7 +30,8 @@ $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
 if (-not $process) {
     Write-Warning "No process found with PID $pid. Cleaning up PID file."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
-    exit 0
+    $global:LASTEXITCODE = 0
+    return
 }
 
 try {
@@ -36,7 +40,10 @@ try {
 } catch {
     $message = "Failed to stop process {0}: {1}" -f $pid, $_
     Write-Error $message
-    exit 1
+    $global:LASTEXITCODE = 1
+    return
 }
 
 Remove-Item $pidFile -ErrorAction SilentlyContinue
+$global:LASTEXITCODE = 0
+return

@@ -24,28 +24,53 @@ foreach ($dir in @($runtimeDir, $logDir)) {
 
 if (Test-Path $pidFile) {
     try {
-        $existingPid = Get-Content $pidFile -ErrorAction Stop
-        if ($existingPid) {
-            $proc = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
-            if ($proc) {
-                Write-Warning "API already appears to be running with PID $existingPid. Use scripts/stop_api.ps1 to stop it."
-                exit 1
-            }
-        }
+        $existingPidContent = Get-Content -Path $pidFile -Raw -ErrorAction Stop
     } catch {
-        Write-Warning "Could not read existing PID file. It will be overwritten."
+        Write-Warning "Could not read existing PID file."
+        $global:LASTEXITCODE = 1
+        return
+    }
+
+    $existingPidValue = $existingPidContent.Trim()
+    $existingPid = 0
+    if (-not [int]::TryParse($existingPidValue, [ref]$existingPid)) {
+        Write-Warning "Existing PID file is invalid. Removing it."
+        Remove-Item $pidFile -ErrorAction SilentlyContinue
+    } else {
+        $proc = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
+        if ($proc) {
+            Write-Warning "API already appears to be running with PID $existingPid. Use scripts/stop_api.ps1 to stop it."
+            $global:LASTEXITCODE = 1
+            return
+        }
+
+        Remove-Item $pidFile -ErrorAction SilentlyContinue
     }
 }
 
-if (!(Test-Path $logFileOut)) { "" | Out-File -FilePath $logFileOut -Encoding utf8 -Force }
-if (!(Test-Path $logFileErr)) { "" | Out-File -FilePath $logFileErr -Encoding utf8 -Force }
+if (-not (Test-Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut -Force | Out-Null }
+if (-not (Test-Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr -Force | Out-Null }
 
-$process = Start-Process -FilePath "powershell" -ArgumentList @("-NoLogo", "-NoProfile", "-File", "`"$startScript`"") -WorkingDirectory $repoRoot -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr -PassThru
+$arguments = @(
+    "-NoLogo",
+    "-NoProfile",
+    "-File",
+    "`"$startScript`"",
+    "1>>",
+    "`"$logFileOut`"",
+    "2>>",
+    "`"$logFileErr`""
+)
+
+$process = Start-Process -FilePath "powershell" -ArgumentList $arguments -WorkingDirectory $repoRoot -PassThru
 
 if (-not $process) {
     Write-Error "Failed to start API in background."
-    exit 1
+    $global:LASTEXITCODE = 1
+    return
 }
 
 Set-Content -Path $pidFile -Value $process.Id
 Write-Output "API started in background with PID $($process.Id). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
+$global:LASTEXITCODE = 0
+return
