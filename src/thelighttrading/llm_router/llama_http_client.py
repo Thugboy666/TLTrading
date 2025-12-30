@@ -2,9 +2,19 @@ import requests
 from ..config.settings import get_settings
 
 
-def is_server_available() -> bool:
-    settings = get_settings()
-    url = f"{settings.llm_base_url.rstrip('/')}/v1/models"
+def get_base_url(settings=None) -> str:
+    settings = settings or get_settings()
+    if settings.llm_mode == "local":
+        host = settings.llm_host or "127.0.0.1"
+        port = settings.llm_port or 8081
+        return f"http://{host}:{port}"
+    return settings.llm_base_url
+
+
+def is_server_available(base_url: str | None = None) -> bool:
+    if base_url is None:
+        base_url = get_base_url()
+    url = f"{base_url.rstrip('/')}/v1/models"
     try:
         resp = requests.get(url, timeout=1)
         resp.raise_for_status()
@@ -13,9 +23,10 @@ def is_server_available() -> bool:
         return False
 
 
-def post_completion(messages, temperature=0.2, max_tokens=512):
-    settings = get_settings()
-    url = f"{settings.llm_base_url.rstrip('/')}/v1/chat/completions"
+def post_completion(messages, temperature=0.2, max_tokens=512, base_url: str | None = None):
+    if base_url is None:
+        base_url = get_base_url()
+    url = f"{base_url.rstrip('/')}/v1/chat/completions"
     payload = {
         "model": "auto",
         "messages": messages,

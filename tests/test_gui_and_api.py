@@ -1,7 +1,5 @@
 import json
 from pathlib import Path
-import json
-from pathlib import Path
 
 import pytest
 from thelighttrading.config.settings import get_settings
@@ -23,21 +21,21 @@ def test_gui_files_no_cdn():
 
 
 def test_router_real_fallback(monkeypatch, tmp_path):
-    monkeypatch.setenv("LLM_MODE", "real")
-    monkeypatch.setenv("LLM_BASE_URL", "http://127.0.0.1:9999")
+    monkeypatch.setenv("LLM_MODE", "local")
+    monkeypatch.setenv("LLM_HOST", "127.0.0.1")
+    monkeypatch.setenv("LLM_PORT", "9999")
     monkeypatch.setenv("LOG_DIR", str(tmp_path))
     get_settings.cache_clear()
 
-    monkeypatch.setattr(llama_http_client, "is_server_available", lambda: False)
+    monkeypatch.setattr(llama_http_client, "is_server_available", lambda *_args, **_kwargs: False)
     result = llm_router.generate("news_llama", [{"role": "user", "content": "hi"}])
-    data = json.loads(result)
-    assert data["ticker"] == "XYZ"
+    assert "unreachable" in result
 
     audit_path = Path(tmp_path) / "audit.jsonl"
     assert audit_path.exists()
     last_line = audit_path.read_text(encoding="utf-8").strip().splitlines()[-1]
     record = json.loads(last_line)
-    assert record["mode"] == "real_fallback"
+    assert record["mode"] == "local_unreachable"
     get_settings.cache_clear()
 
 
