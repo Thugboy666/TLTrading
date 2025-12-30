@@ -54,6 +54,15 @@ if (Test-Path $pidFile) {
 
 . "$PSScriptRoot/_load_env.ps1"
 
+if (-not $PSBoundParameters.ContainsKey('llmHost') -and $env:LLM_HOST) {
+    $llmHost = $env:LLM_HOST
+}
+if (-not $PSBoundParameters.ContainsKey('llmPort') -and $env:LLM_PORT) {
+    $parsedPort = 0
+    if ([int]::TryParse($env:LLM_PORT, [ref]$parsedPort) -and $parsedPort -gt 0) {
+        $llmPort = $parsedPort
+    }
+}
 if (-not $PSBoundParameters.ContainsKey('llmHost') -and $env:LOCAL_LLM_SERVER_URL) {
     try {
         $uri = [System.Uri]$env:LOCAL_LLM_SERVER_URL
@@ -83,14 +92,22 @@ foreach ($exeName in $llmCandidates) {
 }
 
 if (-not $llmExe) {
+    $wildcardCandidate = Get-ChildItem -Path $binDir -Filter "*server*.exe" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($wildcardCandidate) {
+        $llmExe = $wildcardCandidate.FullName
+    }
+}
+
+if (-not $llmExe) {
     $expectedList = $llmCandidates -join ", "
-    Write-Error "llama.cpp server binary not found under $binDir. Expected one of: $expectedList. Copy the llama.cpp release folder into runtime/bin/llama/."
+    Write-Error "llama.cpp server binary not found under $binDir. Expected one of: $expectedList or any *server*.exe. Copy the llama.cpp release folder into runtime/bin/llama/."
     $global:LASTEXITCODE = 1
     return
 }
 
 if (-not $ModelPath) {
     $modelCandidates = @()
+    if ($env:LLM_CHAT_MODEL) { $modelCandidates += $env:LLM_CHAT_MODEL }
     if ($env:LOCAL_CHAT_MODEL_DEFAULT) { $modelCandidates += $env:LOCAL_CHAT_MODEL_DEFAULT }
     if ($env:LOCAL_CHAT_MODEL_QWEN) { $modelCandidates += $env:LOCAL_CHAT_MODEL_QWEN }
     if ($env:LOCAL_CHAT_MODEL_MISTRAL) { $modelCandidates += $env:LOCAL_CHAT_MODEL_MISTRAL }
@@ -104,7 +121,14 @@ if (-not $ModelPath) {
 }
 
 if (-not $ModelPath) {
-    Write-Error "No chat model configured. Set LOCAL_CHAT_MODEL_DEFAULT (preferred), LOCAL_CHAT_MODEL_QWEN, or LOCAL_CHAT_MODEL_MISTRAL in runtime/.env."
+    $firstGguf = Get-ChildItem -Path $chatModelDir -Filter "*.gguf" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($firstGguf) {
+        $ModelPath = $firstGguf.FullName
+    }
+}
+
+if (-not $ModelPath) {
+    Write-Error "No chat model configured. Set LLM_CHAT_MODEL in runtime/.env or place a GGUF file under runtime/models/chat/."
     $global:LASTEXITCODE = 1
     return
 }

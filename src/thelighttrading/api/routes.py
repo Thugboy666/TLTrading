@@ -7,6 +7,7 @@ from ..config.settings import get_settings
 from ..execution import simulate_execute
 from ..protocols.signing import verify_signature
 from ..llm_router.profiles import PROFILES
+from ..llm_router import llama_http_client
 from ..memory.node_memory import fetch_last_n, fetch_by_key
 from ..observability.metrics import metrics
 from ..protocols.reporting import build_execution_report, persist_report
@@ -49,6 +50,39 @@ def health():
 
     if last_run is not None:
         response["last_run"] = last_run
+
+    return response
+
+
+@router.get("/llm/health")
+def llm_health():
+    settings = get_settings()
+    base_url = llama_http_client.get_base_url(settings) if settings.llm_mode != "mock" else None
+    response = {
+        "ok": True,
+        "mode": settings.llm_mode,
+        "backend": settings.llm_backend,
+        "base_url": base_url,
+        "chat_model": settings.llm_chat_model_path,
+        "embed_model": settings.llm_embed_model_path,
+    }
+
+    if settings.llm_mode == "mock":
+        return response
+
+    if not base_url:
+        response["ok"] = False
+        response["reason"] = "missing base URL"
+        return response
+
+    try:
+        available = llama_http_client.is_server_available(base_url)
+        response["ok"] = available
+        if not available:
+            response["reason"] = f"unreachable at {base_url}"
+    except Exception as exc:  # noqa: BLE001
+        response["ok"] = False
+        response["reason"] = str(exc)
 
     return response
 

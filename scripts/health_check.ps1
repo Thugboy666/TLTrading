@@ -16,7 +16,8 @@ if (Test-Path -Path $envFile) {
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
 if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
-if (-not $env:LLM_BASE_URL) { $env:LLM_BASE_URL = "http://127.0.0.1:8081" }
+if (-not $env:LLM_HOST) { $env:LLM_HOST = "127.0.0.1" }
+if (-not $env:LLM_PORT) { $env:LLM_PORT = "8081" }
 
 $uri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
 
@@ -72,11 +73,15 @@ if ($expectedPid -and $health.pid -ne $expectedPid) {
 
 Write-Output "OK: pid $($health.pid) uptime $($health.uptime_seconds)s mode $($health.llm_mode)"
 if ($CheckLlm) {
-    $trimmedBase = $env:LLM_BASE_URL.TrimEnd('/')
-    $llmHealth = "$trimmedBase/health"
+    $llmHealth = "http://$($env:APP_HOST):$($env:APP_PORT)/llm/health"
     try {
         $llmResponse = Invoke-WebRequest -Uri $llmHealth -UseBasicParsing -ErrorAction Stop
-        Write-Output "LLM OK: $llmHealth status $($llmResponse.StatusCode)"
+        $llmJson = $llmResponse.Content | ConvertFrom-Json
+        if (-not $llmJson.ok) {
+            Write-Output "LLM DOWN: $($llmJson.reason)"
+            exit 1
+        }
+        Write-Output "LLM OK: $llmHealth status $($llmResponse.StatusCode) mode $($llmJson.mode) backend $($llmJson.backend)"
     } catch {
         Write-Output "LLM DOWN: unable to reach $llmHealth ($_ )"
         exit 1
