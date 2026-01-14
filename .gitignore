@@ -1,47 +1,25 @@
-# Python
-.venv/
-__pycache__/
-*.pyc
+# --- runtime policy ---
+# Keep runtime folder structure, but DO NOT commit generated/runtime content
 
-# env / secrets
-.env
+# Never commit secrets
 runtime/.env
+.env
 
-# logs & runtime output
-*.log
-data/
-logs/
+# Never commit runtime outputs
 runtime/logs/
+runtime/data/
 runtime/state/
 runtime/*.pid
 
-# DB
-*.sqlite
-*.db
+# Never commit llama.cpp binaries
+runtime/bin/llama/**
+!runtime/bin/llama/.gitkeep
 
-# OS
-.DS_Store
-
-# Large models (do NOT commit)
+# Never commit models
+runtime/models/**/*.gguf
 *.gguf
 
-# Keep runtime structure placeholders tracked
-!runtime/
-!runtime/**
-
-# Keep examples
-!.env.example
+# Keep placeholders and examples
 !runtime/.env.example
-
-# runtime secrets & runtime state
-runtime/.env
-runtime/data/
-runtime/logs/
-runtime/state/
-runtime/*.pid
-
-# models (huge)
-runtime/models/**/*.gguf
-
-# build artifacts
-src/**/*.egg-info/
+!runtime/**/.gitkeep
+!.env.example
