@@ -1,0 +1,2 @@
+[console_scripts]
+thelighttrading = thelighttrading.cli.main:app
