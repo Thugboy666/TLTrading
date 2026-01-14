@@ -41,6 +41,27 @@ thelighttrading run-pipeline
 scripts\smoke_test.ps1
 ```
 
+## Portable mode (Windows, embeddable Python)
+
+Portable mode uses the official Python embeddable distribution placed at `runtime/python/python.exe`. Download the **Windows embeddable package (64-bit)** from the Python Windows downloads page and extract the zip contents into `runtime/python/` so that `runtime/python/python.exe` exists.
+
+- Python downloads: https://www.python.org/downloads/windows/
+
+First-time portable setup:
+
+```powershell
+scripts\bootstrap_portable.ps1
+scripts\portable_shell.ps1
+```
+
+Portable run order (after opening the portable shell):
+
+```powershell
+scripts\start_llm_bg.ps1
+scripts\start_api_bg.ps1
+scripts\health_check.ps1 -CheckLlm
+```
+
 Copy `runtime/.env.example` to `runtime/.env` and provide signing keys if you want signed ActionPackets. Without keys, the system generates HOLD packets marked UNSIGNED.
 
 Recommended llama.cpp settings in `runtime/.env`:
