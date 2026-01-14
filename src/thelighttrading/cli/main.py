@@ -5,7 +5,7 @@ import typer
 from nacl import signing
 from nacl.encoding import Base64Encoder
 from ..api.server import app as api_app
-from ..nodes.orchestrator import Orchestrator
+from ..pipeline.runner import run_pipeline as run_rag_pipeline
 from ..execution import simulate_execute
 from ..config.settings import get_settings
 from ..protocols.schemas import ActionPacket, ExecutionReport
@@ -24,9 +24,8 @@ def run_api():
 
 
 @app.command("run-pipeline")
-def run_pipeline(headlines: str = "Mock headlines"):
-    orch = Orchestrator()
-    result = orch.run_pipeline(headlines)
+def run_pipeline(query: str = typer.Option("Mock query", "--query"), top_k: int = typer.Option(5, "--top-k")):
+    result = run_rag_pipeline(query, top_k=top_k)
     typer.echo(json.dumps(result, indent=2))
 
 

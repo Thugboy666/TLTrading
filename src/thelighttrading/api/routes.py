@@ -3,6 +3,7 @@ import time
 from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from ..nodes.orchestrator import Orchestrator
+from ..pipeline.runner import run_pipeline as run_rag_pipeline
 from ..config.settings import get_settings
 from ..execution import simulate_execute
 from ..protocols.signing import verify_signature
@@ -117,6 +118,11 @@ def get_inputs_status():
 
 @router.post("/pipeline/run")
 def run_pipeline(payload: dict | None = None):
+    if payload and ("query" in payload or "top_k" in payload):
+        query = payload.get("query", "") if payload else ""
+        top_k = payload.get("top_k", 5) if payload else 5
+        return run_rag_pipeline(query, top_k=top_k)
+
     headlines = None
     headlines_path = None
     if payload and "headlines" in payload:
@@ -128,6 +134,16 @@ def run_pipeline(payload: dict | None = None):
     except ValueError as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail=str(exc))
     return result
+
+
+@router.get("/pipeline/last")
+def get_pipeline_last():
+    state_dir = Path(get_settings().data_dir) / "state"
+    last_path = state_dir / "pipeline_last.json"
+    if not last_path.exists():
+        raise HTTPException(status_code=404, detail="no pipeline runs yet")
+    with last_path.open("r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @router.get("/pipeline/run/{run_id}")
