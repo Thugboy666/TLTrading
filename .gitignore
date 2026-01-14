@@ -32,3 +32,16 @@ runtime/*.pid
 # Keep examples
 !.env.example
 !runtime/.env.example
+
+# runtime secrets & runtime state
+runtime/.env
+runtime/data/
+runtime/logs/
+runtime/state/
+runtime/*.pid
+
+# models (huge)
+runtime/models/**/*.gguf
+
+# build artifacts
+src/**/*.egg-info/
