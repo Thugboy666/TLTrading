@@ -1,22 +1,25 @@
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$runtimeRoot = Join-Path $repoRoot "runtime"
-$logsDir = Join-Path $runtimeRoot "logs"
-$dotenvPath = Join-Path $runtimeRoot ".env"
-$activateScript = Join-Path $repoRoot ".venv/Scripts/Activate.ps1"
+if ([string]::IsNullOrWhiteSpace($repoRoot)) {
+    Write-Error "Unable to determine repository root."
+    exit 1
+}
 
-$childScript = @'
-param(
-    [string]$RepoRoot,
-    [string]$RuntimeRoot,
-    [string]$LogsDir,
-    [string]$DotenvPath,
-    [string]$ActivateScript
-)
+$resolvedRepoRoot = Resolve-Path -LiteralPath $repoRoot -ErrorAction SilentlyContinue
+if (-not $resolvedRepoRoot) {
+    Write-Error "Unable to resolve repository root at '$repoRoot'."
+    exit 1
+}
 
-Set-Location -LiteralPath $RepoRoot
+$repoRoot = $resolvedRepoRoot.Path
+$dotenvPath = Join-Path $repoRoot "runtime\.env"
+$logsDir = Join-Path $repoRoot "runtime\logs"
+$activateScript = Join-Path $repoRoot ".venv\Scripts\Activate.ps1"
 
-if (Test-Path $DotenvPath) {
-    $env:DOTENV_PATH = $DotenvPath
+$childScript = @"
+Set-Location -LiteralPath '$repoRoot'
+
+if (Test-Path '$dotenvPath') {
+    `$env:DOTENV_PATH = '$dotenvPath'
 } else {
     Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
 }
@@ -24,24 +27,25 @@ if (Test-Path $DotenvPath) {
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
 Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64 -ErrorAction SilentlyContinue
 
-if (-Not (Test-Path $LogsDir)) {
-    New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+if (-Not (Test-Path '$logsDir')) {
+    New-Item -ItemType Directory -Force -Path '$logsDir' | Out-Null
 }
 
-if (Test-Path $ActivateScript) {
-    . $ActivateScript
+if (Test-Path '$activateScript') {
+    . '$activateScript'
 } else {
     Write-Host "[portable] .venv not found. Run scripts\\bootstrap_portable.ps1 first."
 }
-'@
+
+`$pythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not `$pythonExe) {
+    `$pythonExe = "python not found"
+}
+Write-Host "[portable] OK repo: $repoRoot python: `$pythonExe"
+"@
 
 Start-Process "powershell" -WorkingDirectory $repoRoot -ArgumentList @(
     "-NoExit",
     "-Command",
-    $childScript,
-    $repoRoot,
-    $runtimeRoot,
-    $logsDir,
-    $dotenvPath,
-    $activateScript
+    $childScript
 )
