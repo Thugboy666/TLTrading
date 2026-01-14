@@ -8,7 +8,9 @@ runtime/.env
 # Never commit runtime outputs
 runtime/logs/
 runtime/data/
-runtime/state/
+runtime/state/*
+!runtime/state/news_samples/
+!runtime/state/news_samples/**
 runtime/*.pid
 
 # Never commit llama.cpp binaries
