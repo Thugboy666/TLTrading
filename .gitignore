@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 .venv/
 __pycache__/
 *.pyc
@@ -12,3 +13,38 @@ logs/
 # Allow committed runtime directories and placeholders
 !runtime/
 !runtime/**
+=======
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Data & logs
+data/
+logs/
+*.log
+*.sqlite
+*.db
+
+# OS
+.DS_Store
+
+# Models (too big, local only)
+*.gguf
+
+# Runtime: keep structure, not artifacts
+runtime/*
+!runtime/.env.example
+!runtime/README.md
+!runtime/bin/
+!runtime/bin/llama/
+!runtime/models/
+!runtime/models/chat/
+!runtime/models/embed/
+!runtime/logs/
+>>>>>>> 3aa8007 (Initial commit)
