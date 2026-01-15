@@ -4,6 +4,18 @@ $logDir = Join-Path $runtimeDir "logs"
 $logFileOut = Join-Path $logDir "uvicorn.out.log"
 $logFileErr = Join-Path $logDir "uvicorn.err.log"
 $startScript = Join-Path $PSScriptRoot "start_api.ps1"
+$envFile = Join-Path $runtimeDir ".env"
+
+if (Test-Path -Path $envFile) {
+    $env:DOTENV_PATH = $envFile
+} else {
+    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+}
+
+. "$PSScriptRoot/_load_env.ps1"
+
+if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
+if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
 
 foreach ($dir in @($runtimeDir, $logDir)) {
     if (-Not (Test-Path $dir)) {
@@ -34,5 +46,53 @@ if (-not $process) {
 }
 
 Write-Output "API start script launched in background with wrapper PID $($process.Id). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
+$healthUri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
+$ready = $false
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    try {
+        $response = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        $health = $response.Content | ConvertFrom-Json
+        if ($health.ok) {
+            $ready = $true
+            break
+        }
+    } catch {
+        Start-Sleep -Seconds 1
+    }
+}
+
+if (-not $ready) {
+    Write-Error "API failed to become ready at $healthUri within 20 seconds."
+    Write-Output "=== Last 60 lines of $logFileErr ==="
+    if (Test-Path $logFileErr) {
+        Get-Content -Path $logFileErr -Tail 60
+    } else {
+        Write-Output "(missing log file)"
+    }
+    Write-Output "=== Last 60 lines of $logFileOut ==="
+    if (Test-Path $logFileOut) {
+        Get-Content -Path $logFileOut -Tail 60
+    } else {
+        Write-Output "(missing log file)"
+    }
+    $global:LASTEXITCODE = 1
+    return
+}
+
+$pidFile = Join-Path $runtimeDir "api.pid"
+$apiPid = $null
+if (Test-Path $pidFile) {
+    $pidValue = (Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue).Trim()
+    $parsedPid = 0
+    if ([int]::TryParse($pidValue, [ref]$parsedPid)) {
+        $apiPid = $parsedPid
+    }
+}
+
+if ($apiPid) {
+    Write-Output "API ready at $healthUri with uvicorn PID $apiPid."
+} else {
+    Write-Output "API ready at $healthUri."
+}
 $global:LASTEXITCODE = 0
 return

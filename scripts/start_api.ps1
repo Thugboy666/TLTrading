@@ -7,6 +7,9 @@ $runtimeDir = Join-Path $repoRoot "runtime"
 $stateDir = Join-Path $runtimeDir "state"
 $pidFile = Join-Path $runtimeDir "api.pid"
 $statusFile = Join-Path $stateDir "api.status.json"
+$logDir = Join-Path $runtimeDir "logs"
+$logFileOut = Join-Path $logDir "uvicorn.out.log"
+$logFileErr = Join-Path $logDir "uvicorn.err.log"
 $envFile = Join-Path $runtimeDir ".env"
 $envExample = Join-Path $runtimeDir ".env.example"
 $envFileExists = Test-Path -Path $envFile
@@ -42,11 +45,14 @@ if ($envFileExists) {
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
 Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
 
-foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), (Join-Path $runtimeDir "logs"), $stateDir)) {
+foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), $logDir, $stateDir)) {
     if (-Not (Test-Path -Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
     }
 }
+
+if (-not (Test-Path -Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut -Force | Out-Null }
+if (-not (Test-Path -Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr -Force | Out-Null }
 
 if (Test-Path $pidFile) {
     $existingPidContent = Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue
@@ -89,10 +95,29 @@ Set-Location $repoRoot
 $uvicornArgs = @("-m", "uvicorn", "thelighttrading.api.server:app", "--host", $env:APP_HOST, "--port", $env:APP_PORT)
 if ($Reload) { $uvicornArgs += "--reload" }
 
-$uvicornProcess = Start-Process -FilePath "python" -ArgumentList $uvicornArgs -WorkingDirectory $repoRoot -PassThru -NoNewWindow
+$uvicornProcess = Start-Process -FilePath "python" -ArgumentList $uvicornArgs -WorkingDirectory $repoRoot -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
 
 if (-not $uvicornProcess) {
     Write-Error "Failed to start uvicorn process."
+    $global:LASTEXITCODE = 1
+    return
+}
+
+$healthUri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
+$ready = $false
+for ($attempt = 0; $attempt -lt 20; $attempt++) {
+    try {
+        $null = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        $ready = $true
+        break
+    } catch {
+        Start-Sleep -Seconds 1
+    }
+}
+
+if (-not $ready) {
+    Write-Error "API failed to become reachable at $healthUri within 20 seconds."
+    Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 1
     return
 }
