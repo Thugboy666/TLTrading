@@ -57,7 +57,7 @@ function Get-ListenerPid {
 
     $uniquePids = $pids | Where-Object { $_ -ne $null } | Select-Object -Unique
     if ($uniquePids.Count -gt 1) {
-        throw "Multiple listening PIDs found for port $Port: $($uniquePids -join ', ')."
+        throw "Multiple listening PIDs found for port ${Port}: $($uniquePids -join ', ')."
     }
     if ($uniquePids.Count -eq 1) {
         return $uniquePids[0]
