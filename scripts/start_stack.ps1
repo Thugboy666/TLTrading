@@ -6,6 +6,8 @@ $envFile = Join-Path $runtimeDir ".env"
 $logDir = Join-Path $runtimeDir "logs"
 $logFileOut = Join-Path $logDir "uvicorn.out.log"
 $logFileErr = Join-Path $logDir "uvicorn.err.log"
+$startedLlm = $false
+$startedApi = $false
 
 if (Test-Path -Path $envFile) {
     $env:DOTENV_PATH = $envFile
@@ -66,17 +68,24 @@ $llmUris = @(
     "http://$($env:LLM_HOST):$($env:LLM_PORT)/v1/models"
 )
 
-if (Test-LlmReady -Uris $llmUris) {
-    Write-Output "LLM already running at $($llmUris -join ', ')."
+$llmMode = $env:LLM_MODE
+if ($llmMode -and $llmMode.ToLowerInvariant() -eq "local") {
+    if (Test-LlmReady -Uris $llmUris) {
+        Write-Output "LLM already running at $($llmUris -join ', ')."
+    } else {
+        & (Join-Path $PSScriptRoot "start_llm_bg.ps1")
+        if ($LASTEXITCODE -ne 0) {
+            exit 1
+        }
+        $startedLlm = $true
+        if (-not (Wait-LlmReady -Uris $llmUris)) {
+            Write-Error "LLM failed to become ready at $($llmUris -join ', ') within 30 seconds."
+            & (Join-Path $PSScriptRoot "stop_llm.ps1") | Out-Null
+            exit 1
+        }
+    }
 } else {
-    & (Join-Path $PSScriptRoot "start_llm_bg.ps1")
-    if ($LASTEXITCODE -ne 0) {
-        exit 1
-    }
-    if (-not (Wait-LlmReady -Uris $llmUris)) {
-        Write-Error "LLM failed to become ready at $($llmUris -join ', ') within 30 seconds."
-        exit 1
-    }
+    Write-Output "LLM_MODE is not local; skipping LLM startup."
 }
 
 & (Join-Path $PSScriptRoot "start_api_bg.ps1")
@@ -93,11 +102,21 @@ if ($LASTEXITCODE -ne 0) {
     } else {
         Write-Output "(missing log file)"
     }
+    if ($startedLlm) {
+        & (Join-Path $PSScriptRoot "stop_llm.ps1") | Out-Null
+    }
     exit 1
 }
+$startedApi = $true
 
 & $healthScript -CheckLlm
 if ($LASTEXITCODE -ne 0) {
+    if ($startedApi) {
+        & (Join-Path $PSScriptRoot "stop_api.ps1") | Out-Null
+    }
+    if ($startedLlm) {
+        & (Join-Path $PSScriptRoot "stop_llm.ps1") | Out-Null
+    }
     exit 1
 }
 

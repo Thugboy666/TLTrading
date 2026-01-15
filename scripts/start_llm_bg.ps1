@@ -105,41 +105,71 @@ if (-not $llmExe) {
     return
 }
 
-if (-not $ModelPath) {
-    $modelCandidates = @()
-    if ($env:LLM_CHAT_MODEL) { $modelCandidates += $env:LLM_CHAT_MODEL }
-    if ($env:LOCAL_CHAT_MODEL_DEFAULT) { $modelCandidates += $env:LOCAL_CHAT_MODEL_DEFAULT }
-    if ($env:LOCAL_CHAT_MODEL_QWEN) { $modelCandidates += $env:LOCAL_CHAT_MODEL_QWEN }
-    if ($env:LOCAL_CHAT_MODEL_MISTRAL) { $modelCandidates += $env:LOCAL_CHAT_MODEL_MISTRAL }
-    if ($env:LLAMA_CHAT_MODEL) { $modelCandidates += $env:LLAMA_CHAT_MODEL }
-    foreach ($candidate in $modelCandidates) {
-        if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -Path $candidate)) {
-            $ModelPath = $candidate
-            break
+$llmExeName = [System.IO.Path]::GetFileName($llmExe)
+$isRpcServer = $llmExeName -ieq "rpc-server.exe"
+$supportsLogDisable = $false
+try {
+    $helpText = & $llmExe "--help" 2>&1 | Out-String
+    if ($helpText -match "--log-disable") {
+        $supportsLogDisable = $true
+    }
+} catch {
+    $supportsLogDisable = $false
+}
+
+if (-not $isRpcServer) {
+    if (-not $ModelPath) {
+        $modelCandidates = @()
+        if ($env:LLM_CHAT_MODEL) { $modelCandidates += $env:LLM_CHAT_MODEL }
+        if ($env:LOCAL_CHAT_MODEL_DEFAULT) { $modelCandidates += $env:LOCAL_CHAT_MODEL_DEFAULT }
+        if ($env:LOCAL_CHAT_MODEL_QWEN) { $modelCandidates += $env:LOCAL_CHAT_MODEL_QWEN }
+        if ($env:LOCAL_CHAT_MODEL_MISTRAL) { $modelCandidates += $env:LOCAL_CHAT_MODEL_MISTRAL }
+        if ($env:LLAMA_CHAT_MODEL) { $modelCandidates += $env:LLAMA_CHAT_MODEL }
+        foreach ($candidate in $modelCandidates) {
+            if (-not [string]::IsNullOrWhiteSpace($candidate) -and (Test-Path -Path $candidate)) {
+                $ModelPath = $candidate
+                break
+            }
         }
     }
-}
 
-if (-not $ModelPath) {
-    $firstGguf = Get-ChildItem -Path $chatModelDir -Filter "*.gguf" -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($firstGguf) {
-        $ModelPath = $firstGguf.FullName
+    if (-not $ModelPath) {
+        $firstGguf = Get-ChildItem -Path $chatModelDir -Filter "*.gguf" -File -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($firstGguf) {
+            $ModelPath = $firstGguf.FullName
+        }
+    }
+
+    if (-not $ModelPath) {
+        Write-Error "No chat model configured. Set LLM_CHAT_MODEL in runtime/.env or place a GGUF file under runtime/models/chat/."
+        $global:LASTEXITCODE = 1
+        return
+    }
+
+    if (-not (Test-Path -Path $ModelPath)) {
+        Write-Error "Model file not found at $ModelPath. Place a GGUF chat model under runtime/models/chat/."
+        $global:LASTEXITCODE = 1
+        return
     }
 }
 
-if (-not $ModelPath) {
-    Write-Error "No chat model configured. Set LLM_CHAT_MODEL in runtime/.env or place a GGUF file under runtime/models/chat/."
-    $global:LASTEXITCODE = 1
-    return
+$threadCount = 0
+if ($env:LLM_THREADS) {
+    [int]::TryParse($env:LLM_THREADS, [ref]$threadCount) | Out-Null
 }
 
-if (-not (Test-Path -Path $ModelPath)) {
-    Write-Error "Model file not found at $ModelPath. Place a GGUF chat model under runtime/models/chat/."
-    $global:LASTEXITCODE = 1
-    return
+if ($isRpcServer) {
+    $arguments = @("-H", $llmHost, "-p", $llmPort)
+    if ($threadCount -gt 0) {
+        $arguments += @("-t", $threadCount)
+    }
+} else {
+    $arguments = @("--host", $llmHost, "--port", $llmPort)
+    if ($supportsLogDisable) {
+        $arguments += "--log-disable"
+    }
+    $arguments += @("-m", $ModelPath, "--embedding")
 }
-
-$arguments = @("--host", $llmHost, "--port", $llmPort, "--log-disable", "-m", $ModelPath, "--embedding")
 
 $llamaProcess = Start-Process -FilePath $llmExe -ArgumentList $arguments -WorkingDirectory $binDir -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
 
@@ -149,10 +179,41 @@ if (-not $llamaProcess) {
     return
 }
 
+$llmPid = $llamaProcess.Id
+Set-Content -Path $pidFile -Value $llmPid
+
+function Test-TcpPort {
+    param(
+        [string]$HostName,
+        [int]$PortNumber,
+        [int]$TimeoutMs = 500
+    )
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+        $asyncResult = $client.BeginConnect($HostName, $PortNumber, $null, $null)
+        if (-not $asyncResult.AsyncWaitHandle.WaitOne($TimeoutMs, $false)) {
+            return $false
+        }
+        $client.EndConnect($asyncResult) | Out-Null
+        return $true
+    } catch {
+        return $false
+    } finally {
+        $client.Close()
+    }
+}
+
 function Test-LlmReady {
     param(
+        [System.Diagnostics.Process]$Process,
         [string[]]$Uris
     )
+    if (-not $Process -or $Process.HasExited) {
+        return $false
+    }
+    if (Test-TcpPort -HostName $llmHost -PortNumber $llmPort) {
+        return $true
+    }
     foreach ($uri in $Uris) {
         try {
             $response = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
@@ -171,17 +232,21 @@ $healthUris = @(
     "http://$llmHost`:$llmPort/v1/models"
 )
 $ready = $false
-for ($attempt = 0; $attempt -lt 30; $attempt++) {
-    if (Test-LlmReady -Uris $healthUris) {
+for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    if ($llamaProcess.HasExited) {
+        break
+    }
+    if (Test-LlmReady -Process $llamaProcess -Uris $healthUris) {
         $ready = $true
         break
     }
-    Start-Sleep -Seconds 1
+    Start-Sleep -Milliseconds 500
 }
 
 if (-not $ready) {
-    Write-Error "LLM server failed to become reachable at $($healthUris -join ', ') within 30 seconds."
+    Write-Error "LLM server failed to become reachable at $($healthUris -join ', ') within 20 seconds."
     Stop-Process -Id $llamaProcess.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path $pidFile -ErrorAction SilentlyContinue
     Write-Output "=== Last 60 lines of $logFileErr ==="
     if (Test-Path $logFileErr) {
         Get-Content -Path $logFileErr -Tail 60
@@ -197,9 +262,6 @@ if (-not $ready) {
     $global:LASTEXITCODE = 1
     return
 }
-
-$llmPid = $llamaProcess.Id
-Set-Content -Path $pidFile -Value $llmPid
 Write-Output "LLM server ready with PID $llmPid (host $llmHost port $llmPort). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
 $global:LASTEXITCODE = 0
 return

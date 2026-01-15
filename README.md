@@ -95,7 +95,7 @@ runtime/
   state/           # PID/status files
 ```
 
-The PowerShell scripts read `runtime/.env` when it exists and will not overwrite it. Configure model filenames with `LLM_CHAT_MODEL` (preferred) or `LOCAL_CHAT_MODEL_DEFAULT`, `LOCAL_CHAT_MODEL_QWEN`, `LOCAL_CHAT_MODEL_MISTRAL`, and `LOCAL_EMBED_MODEL`. Point `LLM_HOST` and `LLM_PORT` at your llama.cpp server. Update `LLM_MODE=local` after launching the llama.cpp server with `scripts/start_llm_bg.ps1`.
+The PowerShell scripts read `runtime/.env` when it exists and will not overwrite it. Configure model filenames with `LLM_CHAT_MODEL` (preferred) or `LOCAL_CHAT_MODEL_DEFAULT`, `LOCAL_CHAT_MODEL_QWEN`, `LOCAL_CHAT_MODEL_MISTRAL`, and `LOCAL_EMBED_MODEL`. Point `LLM_HOST` and `LLM_PORT` at your llama.cpp server. `scripts/start_llm_bg.ps1` auto-detects `rpc-server.exe`/`server.exe`, adds `--log-disable` only when supported, and honors `LLM_THREADS` for `-t` when set. Update `LLM_MODE=local` after launching the llama.cpp server with `scripts/start_llm_bg.ps1`.
 
 To stop and start the stack:
 
