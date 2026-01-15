@@ -141,9 +141,8 @@ $healthUri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
 $ready = $false
 for ($attempt = 0; $attempt -lt 60; $attempt++) {
     try {
-        $response = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
-        $health = $response.Content | ConvertFrom-Json
-        if ($health.ok) {
+        $health = Invoke-RestMethod -Uri $healthUri -TimeoutSec 2 -ErrorAction Stop
+        if ($health -and $health.ok) {
             $ready = $true
             break
         }
@@ -154,15 +153,9 @@ for ($attempt = 0; $attempt -lt 60; $attempt++) {
 
 if (-not $ready) {
     Write-Error "API failed to become ready at $healthUri within 30 seconds."
-    Write-Output "=== Last 120 lines of $logFileErr ==="
+    Write-Output "=== Last 80 lines of $logFileErr ==="
     if (Test-Path $logFileErr) {
-        Get-Content -Path $logFileErr -Tail 120
-    } else {
-        Write-Output "(missing log file)"
-    }
-    Write-Output "=== Last 120 lines of $logFileOut ==="
-    if (Test-Path $logFileOut) {
-        Get-Content -Path $logFileOut -Tail 120
+        Get-Content -Path $logFileErr -Tail 80
     } else {
         Write-Output "(missing log file)"
     }

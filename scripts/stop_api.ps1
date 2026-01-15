@@ -15,7 +15,7 @@ if (Test-Path -Path $envFile) {
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
 if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
 
-function Get-ListenerPid {
+function Get-ListeningPids {
     param(
         [int]$Port
     )
@@ -32,7 +32,7 @@ function Get-ListenerPid {
 
     if (-not $pids -or $pids.Count -eq 0) {
         try {
-            $netstatLines = netstat -ano | findstr ":$Port"
+            $netstatLines = netstat -ano | findstr ":${Port}"
             foreach ($line in $netstatLines) {
                 if ($line -match "LISTENING" -or $line -match "LISTEN") {
                     $parts = $line -split "\s+"
@@ -48,14 +48,72 @@ function Get-ListenerPid {
         }
     }
 
-    $uniquePids = $pids | Where-Object { $_ -ne $null } | Select-Object -Unique
-    if ($uniquePids.Count -gt 1) {
-        throw "Multiple listening PIDs found for port ${Port}: $($uniquePids -join ', ')."
+    return ($pids | Where-Object { $_ -ne $null } | Select-Object -Unique)
+}
+
+function Get-ProcessDetails {
+    param(
+        [int]$ProcessId
+    )
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $process) {
+        return $null
     }
-    if ($uniquePids.Count -eq 1) {
-        return $uniquePids[0]
+
+    $commandLine = $null
+    try {
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId").CommandLine
+    } catch {
+        $commandLine = $null
     }
-    return $null
+
+    $startTime = $null
+    try {
+        $startTime = $process.StartTime
+    } catch {
+        $startTime = $null
+    }
+
+    return [pscustomobject]@{
+        Id = $ProcessId
+        Name = $process.ProcessName
+        CommandLine = $commandLine
+        StartTime = $startTime
+    }
+}
+
+function Select-ListenerPid {
+    param(
+        [int[]]$CandidatePids
+    )
+    if (-not $CandidatePids -or $CandidatePids.Count -eq 0) {
+        return $null
+    }
+
+    $uniquePids = $CandidatePids | Select-Object -Unique
+    $processInfos = @()
+    foreach ($pidValue in $uniquePids) {
+        $info = Get-ProcessDetails -ProcessId $pidValue
+        if ($info) {
+            $processInfos += $info
+        }
+    }
+
+    if (-not $processInfos -or $processInfos.Count -eq 0) {
+        return ($uniquePids | Select-Object -First 1)
+    }
+
+    $uvicornInfos = $processInfos | Where-Object {
+        ($_.CommandLine -match "uvicorn") -or ($_.CommandLine -match "thelighttrading.api.server")
+    }
+
+    $candidateInfos = $uvicornInfos
+    if (-not $candidateInfos -or $candidateInfos.Count -eq 0) {
+        $candidateInfos = $processInfos
+    }
+
+    $selected = $candidateInfos | Sort-Object -Property @{Expression = { if ($_.StartTime) { $_.StartTime } else { [datetime]::MinValue } }} -Descending | Select-Object -First 1
+    return $selected.Id
 }
 
 function Stop-ListenerProcess {
@@ -98,15 +156,6 @@ function Stop-ListenerProcess {
     return $true
 }
 
-$listenerPid = $null
-try {
-    $listenerPid = Get-ListenerPid -Port ([int]$env:APP_PORT)
-} catch {
-    Write-Error $_
-    $global:LASTEXITCODE = 1
-    return
-}
-
 $filePid = $null
 if (Test-Path $pidFile) {
     try {
@@ -117,30 +166,45 @@ if (Test-Path $pidFile) {
             $filePid = $parsedPid
         } else {
             Write-Warning "PID file is invalid. Removing it."
+            Remove-Item $pidFile -ErrorAction SilentlyContinue
         }
     } catch {
         Write-Warning "Could not read PID file."
     }
 }
 
-if (-not $listenerPid -and -not $filePid) {
-    Write-Warning "No listener PID found for port $($env:APP_PORT) and no valid PID file present."
+if ($filePid) {
+    $fileProcess = Get-Process -Id $filePid -ErrorAction SilentlyContinue
+    if ($fileProcess) {
+        if (-not (Stop-ListenerProcess -ProcessId $filePid)) {
+            return
+        }
+        Remove-Item $pidFile -ErrorAction SilentlyContinue
+        Remove-Item $statusFile -ErrorAction SilentlyContinue
+        $global:LASTEXITCODE = 0
+        return
+    }
+    Write-Warning "PID file ($filePid) is stale; falling back to port discovery."
     Remove-Item $pidFile -ErrorAction SilentlyContinue
+}
+
+$listenerPids = Get-ListeningPids -Port ([int]$env:APP_PORT)
+if (-not $listenerPids -or $listenerPids.Count -eq 0) {
+    Write-Warning "No listener PID found for port $($env:APP_PORT)."
     Remove-Item $statusFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 0
     return
 }
 
-if ($listenerPid -and $filePid -and $listenerPid -ne $filePid) {
-    Write-Warning "PID file ($filePid) does not match current listener PID ($listenerPid)."
+$selectedPid = Select-ListenerPid -CandidatePids $listenerPids
+if (-not $selectedPid) {
+    Write-Warning "Unable to select a listener PID for port $($env:APP_PORT)."
+    $global:LASTEXITCODE = 1
+    return
 }
 
-if ($listenerPid) {
-    if (-not (Stop-ListenerProcess -ProcessId $listenerPid)) {
-        return
-    }
-} elseif ($filePid) {
-    Write-Warning "Listener PID not found; leaving process with PID $filePid untouched."
+if (-not (Stop-ListenerProcess -ProcessId $selectedPid)) {
+    return
 }
 
 Remove-Item $pidFile -ErrorAction SilentlyContinue
