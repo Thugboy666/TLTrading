@@ -12,15 +12,25 @@ def get_base_url(settings=None) -> str:
 
 
 def is_server_available(base_url: str | None = None) -> bool:
+    ok, _ = get_server_health(base_url)
+    return ok
+
+
+def get_server_health(base_url: str | None = None) -> tuple[bool, str | None]:
     if base_url is None:
         base_url = get_base_url()
     url = f"{base_url.rstrip('/')}/v1/models"
     try:
         resp = requests.get(url, timeout=1)
-        resp.raise_for_status()
-        return True
-    except requests.RequestException:
-        return False
+    except requests.RequestException as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+    if resp.status_code >= 400:
+        detail = resp.text.strip()
+        if detail:
+            detail = detail[:300]
+            return False, f"HTTP {resp.status_code} {resp.reason}: {detail}"
+        return False, f"HTTP {resp.status_code} {resp.reason}"
+    return True, None
 
 
 def post_completion(messages, temperature=0.2, max_tokens=512, base_url: str | None = None):

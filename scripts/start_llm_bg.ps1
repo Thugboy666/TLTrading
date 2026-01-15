@@ -149,8 +149,57 @@ if (-not $llamaProcess) {
     return
 }
 
+function Test-LlmReady {
+    param(
+        [string[]]$Uris
+    )
+    foreach ($uri in $Uris) {
+        try {
+            $response = Invoke-WebRequest -Uri $uri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300) {
+                return $true
+            }
+        } catch {
+            # keep trying other endpoints
+        }
+    }
+    return $false
+}
+
+$healthUris = @(
+    "http://$llmHost`:$llmPort/health",
+    "http://$llmHost`:$llmPort/v1/models"
+)
+$ready = $false
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    if (Test-LlmReady -Uris $healthUris) {
+        $ready = $true
+        break
+    }
+    Start-Sleep -Seconds 1
+}
+
+if (-not $ready) {
+    Write-Error "LLM server failed to become reachable at $($healthUris -join ', ') within 30 seconds."
+    Stop-Process -Id $llamaProcess.Id -Force -ErrorAction SilentlyContinue
+    Write-Output "=== Last 60 lines of $logFileErr ==="
+    if (Test-Path $logFileErr) {
+        Get-Content -Path $logFileErr -Tail 60
+    } else {
+        Write-Output "(missing log file)"
+    }
+    Write-Output "=== Last 60 lines of $logFileOut ==="
+    if (Test-Path $logFileOut) {
+        Get-Content -Path $logFileOut -Tail 60
+    } else {
+        Write-Output "(missing log file)"
+    }
+    $global:LASTEXITCODE = 1
+    return
+}
+
 $llmPid = $llamaProcess.Id
 Set-Content -Path $pidFile -Value $llmPid
-Write-Output "LLM server started with PID $llmPid (host $llmHost port $llmPort). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
+Write-Output "LLM server ready with PID $llmPid (host $llmHost port $llmPort). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
 $global:LASTEXITCODE = 0
 return

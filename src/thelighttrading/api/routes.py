@@ -73,17 +73,13 @@ def llm_health():
 
     if not base_url:
         response["ok"] = False
-        response["reason"] = "missing base URL"
+        response["reason"] = "missing base URL (set LLM_BASE_URL or LOCAL_LLM_SERVER_URL/LLM_HOST/LLM_PORT)"
         return response
 
-    try:
-        available = llama_http_client.is_server_available(base_url)
-        response["ok"] = available
-        if not available:
-            response["reason"] = f"unreachable at {base_url}"
-    except Exception as exc:  # noqa: BLE001
-        response["ok"] = False
-        response["reason"] = str(exc)
+    available, reason = llama_http_client.get_server_health(base_url)
+    response["ok"] = available
+    if not available:
+        response["reason"] = reason or f"unreachable at {base_url}"
 
     return response
 
