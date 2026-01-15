@@ -13,6 +13,9 @@ if (Test-Path -Path $envFile) {
     Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
 }
 
+Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
+Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
+
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
