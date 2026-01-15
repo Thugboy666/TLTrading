@@ -2,25 +2,33 @@ param(
     [switch]$Reload
 )
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$runtimeDir = Join-Path $repoRoot "runtime"
-$stateDir = Join-Path $runtimeDir "state"
-$pidFile = Join-Path $runtimeDir "api.pid"
-$statusFile = Join-Path $stateDir "api.status.json"
-$logDir = Join-Path $runtimeDir "logs"
-$logFileOut = Join-Path $logDir "uvicorn.out.log"
-$logFileErr = Join-Path $logDir "uvicorn.err.log"
-$envFile = Join-Path $runtimeDir ".env"
-$envExample = Join-Path $runtimeDir ".env.example"
-$envFileExists = Test-Path -Path $envFile
-$venvPython = Join-Path $repoRoot ".venv/Scripts/python.exe"
-$pythonExe = if (Test-Path -Path $venvPython) { $venvPython } else { "python" }
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$RuntimeDir = Join-Path $RepoRoot "runtime"
+$StateDir = Join-Path $RuntimeDir "state"
+$PidFile = Join-Path $RuntimeDir "api.pid"
+$statusFile = Join-Path $StateDir "api.status.json"
+$LogDir = Join-Path $RuntimeDir "logs"
+$LogFileOut = Join-Path $LogDir "uvicorn.out.log"
+$LogFileErr = Join-Path $LogDir "uvicorn.err.log"
+$EnvFile = if ($env:DOTENV_PATH) { $env:DOTENV_PATH } else { Join-Path $RuntimeDir ".env" }
+$EnvExample = Join-Path $RuntimeDir ".env.example"
 
+if (-not $env:DOTENV_PATH) {
+    $env:DOTENV_PATH = $EnvFile
+}
+
+$venvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+if (-not (Test-Path -Path $venvPython)) {
+    Write-Error "Virtualenv python not found at $venvPython. Run .\\scripts\\bootstrap.ps1 first."
+    $global:LASTEXITCODE = 1
+    return
+}
+
+$envFileExists = Test-Path -Path $EnvFile
 if ($envFileExists) {
-    $env:DOTENV_PATH = $envFile
+    $env:DOTENV_PATH = $EnvFile
 } else {
-    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
-    if (-not (Test-Path -Path $envExample)) {
+    if (-not (Test-Path -Path $EnvExample)) {
         @(
             "APP_HOST=127.0.0.1",
             "APP_PORT=8080",
@@ -39,7 +47,7 @@ if ($envFileExists) {
             "LOCAL_EMBED_MODEL=./runtime/models/embed/embed.gguf",
             "# PACKET_SIGNING_PRIVATE_KEY_BASE64=",
             "# PACKET_SIGNING_PUBLIC_KEY_BASE64="
-        ) | Set-Content -Path $envExample
+        ) | Set-Content -Path $EnvExample
     }
     Write-Output "runtime/.env not found. Copy runtime/.env.example to runtime/.env and adjust values."
 }
@@ -82,7 +90,7 @@ function Get-ListenerPid {
 
     $uniquePids = $pids | Where-Object { $_ -ne $null } | Select-Object -Unique
     if ($uniquePids.Count -gt 1) {
-        throw "Multiple listening PIDs found for port $Port: $($uniquePids -join ', ')."
+        throw "Multiple listening PIDs found for port ${Port}: $($uniquePids -join ', ')."
     }
     if ($uniquePids.Count -eq 1) {
         return $uniquePids[0]
@@ -113,21 +121,21 @@ function Test-IsUvicornProcess {
     return $process.ProcessName -match "python|uvicorn"
 }
 
-foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), $logDir, $stateDir)) {
-    if (-Not (Test-Path -Path $dir)) {
+foreach ($dir in @($RuntimeDir, (Join-Path $RuntimeDir "data"), $LogDir, $StateDir)) {
+    if (-Not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
     }
 }
 
-if (-not (Test-Path -Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut -Force | Out-Null }
-if (-not (Test-Path -Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr -Force | Out-Null }
+if (-not (Test-Path $LogFileOut)) { New-Item -ItemType File -Path $LogFileOut -Force | Out-Null }
+if (-not (Test-Path $LogFileErr)) { New-Item -ItemType File -Path $LogFileErr -Force | Out-Null }
 
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
 if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
-if (-not $env:DATA_DIR) { $env:DATA_DIR = Join-Path $runtimeDir "data" }
-if (-not $env:LOG_DIR) { $env:LOG_DIR = Join-Path $runtimeDir "logs" }
+if (-not $env:DATA_DIR) { $env:DATA_DIR = Join-Path $RuntimeDir "data" }
+if (-not $env:LOG_DIR) { $env:LOG_DIR = Join-Path $RuntimeDir "logs" }
 
 try {
     $existingListenerPid = Get-ListenerPid -Port ([int]$env:APP_PORT)
@@ -147,16 +155,16 @@ if ($existingListenerPid) {
     return
 }
 
-if (Test-Path $pidFile) {
-    Remove-Item $pidFile -ErrorAction SilentlyContinue
+if (Test-Path $PidFile) {
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
 }
 
-Set-Location $repoRoot
+Set-Location $RepoRoot
 
 $uvicornArgs = @("-m", "uvicorn", "thelighttrading.api.server:app", "--host", $env:APP_HOST, "--port", $env:APP_PORT)
 if ($Reload) { $uvicornArgs += "--reload" }
 
-$uvicornProcess = Start-Process -FilePath $pythonExe -ArgumentList $uvicornArgs -WorkingDirectory $repoRoot -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
+$uvicornProcess = Start-Process -FilePath $venvPython -ArgumentList $uvicornArgs -WorkingDirectory $RepoRoot -PassThru -NoNewWindow -RedirectStandardOutput $LogFileOut -RedirectStandardError $LogFileErr
 
 if (-not $uvicornProcess) {
     Write-Error "Failed to start uvicorn process."
@@ -164,11 +172,13 @@ if (-not $uvicornProcess) {
     return
 }
 
+Set-Content -Path $PidFile -Value $uvicornProcess.Id
+
 $healthUri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
 $ready = $false
 for ($attempt = 0; $attempt -lt 20; $attempt++) {
     try {
-        $null = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
+        $null = Invoke-RestMethod -Uri $healthUri -TimeoutSec 2 -ErrorAction Stop
         $ready = $true
         break
     } catch {
@@ -179,6 +189,7 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
 if (-not $ready) {
     Write-Error "API failed to become reachable at $healthUri within 20 seconds."
     Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 1
     return
 }
@@ -188,6 +199,7 @@ try {
 } catch {
     Write-Error $_
     Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 1
     return
 }
@@ -195,6 +207,7 @@ try {
 if (-not $listenerPid) {
     Write-Error "API became reachable, but no listener PID found for port $($env:APP_PORT)."
     Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 1
     return
 }
@@ -202,11 +215,12 @@ if (-not $listenerPid) {
 if (-not (Test-IsUvicornProcess -ProcessId $listenerPid)) {
     Write-Error "API health responded, but port $($env:APP_PORT) is owned by PID $listenerPid which does not appear to be uvicorn."
     Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 1
     return
 }
 
-Set-Content -Path $pidFile -Value $listenerPid
+Set-Content -Path $PidFile -Value $listenerPid
 $status = [ordered]@{
     pid        = $listenerPid
     started_at = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -215,5 +229,8 @@ $status = [ordered]@{
 }
 $status | ConvertTo-Json | Set-Content -Path $statusFile
 Write-Output "API started with uvicorn PID $listenerPid."
+
+Wait-Process -Id $uvicornProcess.Id
+
 $global:LASTEXITCODE = 0
 return

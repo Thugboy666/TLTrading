@@ -1,18 +1,16 @@
 param()
 
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$runtimeDir = Join-Path $repoRoot "runtime"
-$envFile = Join-Path $runtimeDir ".env"
-$logDir = Join-Path $runtimeDir "logs"
-$logFileOut = Join-Path $logDir "uvicorn.out.log"
-$logFileErr = Join-Path $logDir "uvicorn.err.log"
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$RuntimeDir = Join-Path $RepoRoot "runtime"
+$EnvFile = if ($env:DOTENV_PATH) { $env:DOTENV_PATH } else { Join-Path $RuntimeDir ".env" }
+$LogDir = Join-Path $RuntimeDir "logs"
+$LogFileOut = Join-Path $LogDir "uvicorn.out.log"
+$LogFileErr = Join-Path $LogDir "uvicorn.err.log"
 $startedLlm = $false
 $startedApi = $false
 
-if (Test-Path -Path $envFile) {
-    $env:DOTENV_PATH = $envFile
-} else {
-    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+if (-not $env:DOTENV_PATH) {
+    $env:DOTENV_PATH = $EnvFile
 }
 
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
@@ -90,15 +88,15 @@ if ($llmMode -and $llmMode.ToLowerInvariant() -eq "local") {
 
 & (Join-Path $PSScriptRoot "start_api_bg.ps1")
 if ($LASTEXITCODE -ne 0) {
-    Write-Output "=== Last 120 lines of $logFileErr ==="
-    if (Test-Path $logFileErr) {
-        Get-Content -Path $logFileErr -Tail 120
+    Write-Output "=== Last 120 lines of $LogFileErr ==="
+    if (Test-Path $LogFileErr) {
+        Get-Content -Path $LogFileErr -Tail 120
     } else {
         Write-Output "(missing log file)"
     }
-    Write-Output "=== Last 120 lines of $logFileOut ==="
-    if (Test-Path $logFileOut) {
-        Get-Content -Path $logFileOut -Tail 120
+    Write-Output "=== Last 120 lines of $LogFileOut ==="
+    if (Test-Path $LogFileOut) {
+        Get-Content -Path $LogFileOut -Tail 120
     } else {
         Write-Output "(missing log file)"
     }
