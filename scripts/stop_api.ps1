@@ -1,13 +1,11 @@
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$pidFile = Join-Path $repoRoot "runtime/api.pid"
-$statusFile = Join-Path $repoRoot "runtime/state/api.status.json"
-$runtimeDir = Join-Path $repoRoot "runtime"
-$envFile = Join-Path $runtimeDir ".env"
+$RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$RuntimeDir = Join-Path $RepoRoot "runtime"
+$PidFile = Join-Path $RuntimeDir "api.pid"
+$StatusFile = Join-Path $RuntimeDir "state/api.status.json"
+$EnvFile = if ($env:DOTENV_PATH) { $env:DOTENV_PATH } else { Join-Path $RuntimeDir ".env" }
 
-if (Test-Path -Path $envFile) {
-    $env:DOTENV_PATH = $envFile
-} else {
-    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
+if (-not $env:DOTENV_PATH) {
+    $env:DOTENV_PATH = $EnvFile
 }
 
 . "$PSScriptRoot/_load_env.ps1"
@@ -157,16 +155,16 @@ function Stop-ListenerProcess {
 }
 
 $filePid = $null
-if (Test-Path $pidFile) {
+if (Test-Path $PidFile) {
     try {
-        $pidContent = Get-Content -Path $pidFile -Raw -ErrorAction Stop
+        $pidContent = Get-Content -Path $PidFile -Raw -ErrorAction Stop
         $pidValue = $pidContent.Trim()
         $parsedPid = 0
         if ([int]::TryParse($pidValue, [ref]$parsedPid)) {
             $filePid = $parsedPid
         } else {
             Write-Warning "PID file is invalid. Removing it."
-            Remove-Item $pidFile -ErrorAction SilentlyContinue
+            Remove-Item $PidFile -ErrorAction SilentlyContinue
         }
     } catch {
         Write-Warning "Could not read PID file."
@@ -179,19 +177,19 @@ if ($filePid) {
         if (-not (Stop-ListenerProcess -ProcessId $filePid)) {
             return
         }
-        Remove-Item $pidFile -ErrorAction SilentlyContinue
-        Remove-Item $statusFile -ErrorAction SilentlyContinue
+        Remove-Item $PidFile -ErrorAction SilentlyContinue
+        Remove-Item $StatusFile -ErrorAction SilentlyContinue
         $global:LASTEXITCODE = 0
         return
     }
     Write-Warning "PID file ($filePid) is stale; falling back to port discovery."
-    Remove-Item $pidFile -ErrorAction SilentlyContinue
+    Remove-Item $PidFile -ErrorAction SilentlyContinue
 }
 
 $listenerPids = Get-ListeningPids -Port ([int]$env:APP_PORT)
 if (-not $listenerPids -or $listenerPids.Count -eq 0) {
     Write-Warning "No listener PID found for port $($env:APP_PORT)."
-    Remove-Item $statusFile -ErrorAction SilentlyContinue
+    Remove-Item $StatusFile -ErrorAction SilentlyContinue
     $global:LASTEXITCODE = 0
     return
 }
@@ -207,7 +205,7 @@ if (-not (Stop-ListenerProcess -ProcessId $selectedPid)) {
     return
 }
 
-Remove-Item $pidFile -ErrorAction SilentlyContinue
-Remove-Item $statusFile -ErrorAction SilentlyContinue
+Remove-Item $PidFile -ErrorAction SilentlyContinue
+Remove-Item $StatusFile -ErrorAction SilentlyContinue
 $global:LASTEXITCODE = 0
 return
