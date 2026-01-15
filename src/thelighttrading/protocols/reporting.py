@@ -10,6 +10,13 @@ def _report_body(report: ExecutionReport) -> dict:
     return {k: v for k, v in report.model_dump().items() if k not in {"signature", "public_key", "report_hash"}}
 
 
+def _fresh_signing_material():
+    settings = get_settings()
+    private_key = (settings.packet_signing_private_key_base64 or "").strip() or None
+    public_key = (settings.packet_signing_public_key_base64 or "").strip() or None
+    return private_key, public_key
+
+
 def build_execution_report(run_record: dict, status_override: str | None = None) -> ExecutionReport:
     packet = run_record.get("packet", {}) if run_record else {}
     packet_id = packet.get("id", "")
