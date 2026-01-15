@@ -13,6 +13,8 @@ $logFileErr = Join-Path $logDir "uvicorn.err.log"
 $envFile = Join-Path $runtimeDir ".env"
 $envExample = Join-Path $runtimeDir ".env.example"
 $envFileExists = Test-Path -Path $envFile
+$venvPython = Join-Path $repoRoot ".venv/Scripts/python.exe"
+$pythonExe = if (Test-Path -Path $venvPython) { $venvPython } else { "python" }
 
 if ($envFileExists) {
     $env:DOTENV_PATH = $envFile
@@ -70,11 +72,6 @@ if (Test-Path $pidFile) {
     Remove-Item $pidFile -ErrorAction SilentlyContinue
 }
 
-if ($envFileExists) {
-    $env:DOTENV_PATH = $envFile
-} else {
-    Remove-Item Env:DOTENV_PATH -ErrorAction SilentlyContinue
-}
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
@@ -82,20 +79,12 @@ if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
 if (-not $env:DATA_DIR) { $env:DATA_DIR = Join-Path $runtimeDir "data" }
 if (-not $env:LOG_DIR) { $env:LOG_DIR = Join-Path $runtimeDir "logs" }
 
-$activateScript = Join-Path $repoRoot ".venv/Scripts/Activate.ps1"
-if (-Not (Test-Path $activateScript)) {
-    Write-Error "Virtual environment not found. Run scripts/setup_windows.ps1 first."
-    $global:LASTEXITCODE = 1
-    return
-}
-
-. $activateScript
 Set-Location $repoRoot
 
 $uvicornArgs = @("-m", "uvicorn", "thelighttrading.api.server:app", "--host", $env:APP_HOST, "--port", $env:APP_PORT)
 if ($Reload) { $uvicornArgs += "--reload" }
 
-$uvicornProcess = Start-Process -FilePath "python" -ArgumentList $uvicornArgs -WorkingDirectory $repoRoot -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
+$uvicornProcess = Start-Process -FilePath $pythonExe -ArgumentList $uvicornArgs -WorkingDirectory $repoRoot -PassThru -NoNewWindow -RedirectStandardOutput $logFileOut -RedirectStandardError $logFileErr
 
 if (-not $uvicornProcess) {
     Write-Error "Failed to start uvicorn process."

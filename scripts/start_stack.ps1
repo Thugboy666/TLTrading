@@ -3,6 +3,9 @@ param()
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDir = Join-Path $repoRoot "runtime"
 $envFile = Join-Path $runtimeDir ".env"
+$logDir = Join-Path $runtimeDir "logs"
+$logFileOut = Join-Path $logDir "uvicorn.out.log"
+$logFileErr = Join-Path $logDir "uvicorn.err.log"
 
 if (Test-Path -Path $envFile) {
     $env:DOTENV_PATH = $envFile
@@ -41,6 +44,20 @@ function Test-LlmReady {
     return $false
 }
 
+function Wait-LlmReady {
+    param(
+        [string[]]$Uris,
+        [int]$Attempts = 60
+    )
+    for ($attempt = 0; $attempt -lt $Attempts; $attempt++) {
+        if (Test-LlmReady -Uris $Uris) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
 $llmUris = @(
     "http://$($env:LLM_HOST):$($env:LLM_PORT)/health",
     "http://$($env:LLM_HOST):$($env:LLM_PORT)/v1/models"
@@ -53,10 +70,26 @@ if (Test-LlmReady -Uris $llmUris) {
     if ($LASTEXITCODE -ne 0) {
         exit 1
     }
+    if (-not (Wait-LlmReady -Uris $llmUris)) {
+        Write-Error "LLM failed to become ready at $($llmUris -join ', ') within 30 seconds."
+        exit 1
+    }
 }
 
 & (Join-Path $PSScriptRoot "start_api_bg.ps1")
 if ($LASTEXITCODE -ne 0) {
+    Write-Output "=== Last 120 lines of $logFileErr ==="
+    if (Test-Path $logFileErr) {
+        Get-Content -Path $logFileErr -Tail 120
+    } else {
+        Write-Output "(missing log file)"
+    }
+    Write-Output "=== Last 120 lines of $logFileOut ==="
+    if (Test-Path $logFileOut) {
+        Get-Content -Path $logFileOut -Tail 120
+    } else {
+        Write-Output "(missing log file)"
+    }
     exit 1
 }
 

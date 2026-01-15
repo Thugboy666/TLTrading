@@ -5,6 +5,7 @@ $logFileOut = Join-Path $logDir "uvicorn.out.log"
 $logFileErr = Join-Path $logDir "uvicorn.err.log"
 $startScript = Join-Path $PSScriptRoot "start_api.ps1"
 $envFile = Join-Path $runtimeDir ".env"
+$pidFile = Join-Path $runtimeDir "api.pid"
 
 if (Test-Path -Path $envFile) {
     $env:DOTENV_PATH = $envFile
@@ -48,7 +49,7 @@ if (-not $process) {
 Write-Output "API start script launched in background with wrapper PID $($process.Id). Logs: stdout -> $logFileOut, stderr -> $logFileErr"
 $healthUri = "http://$($env:APP_HOST):$($env:APP_PORT)/health"
 $ready = $false
-for ($attempt = 0; $attempt -lt 20; $attempt++) {
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
     try {
         $response = Invoke-WebRequest -Uri $healthUri -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
         $health = $response.Content | ConvertFrom-Json
@@ -57,29 +58,36 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
             break
         }
     } catch {
-        Start-Sleep -Seconds 1
+        Start-Sleep -Milliseconds 500
     }
 }
 
 if (-not $ready) {
-    Write-Error "API failed to become ready at $healthUri within 20 seconds."
-    Write-Output "=== Last 60 lines of $logFileErr ==="
+    Write-Error "API failed to become ready at $healthUri within 30 seconds."
+    Write-Output "=== Last 120 lines of $logFileErr ==="
     if (Test-Path $logFileErr) {
-        Get-Content -Path $logFileErr -Tail 60
+        Get-Content -Path $logFileErr -Tail 120
     } else {
         Write-Output "(missing log file)"
     }
-    Write-Output "=== Last 60 lines of $logFileOut ==="
+    Write-Output "=== Last 120 lines of $logFileOut ==="
     if (Test-Path $logFileOut) {
-        Get-Content -Path $logFileOut -Tail 60
+        Get-Content -Path $logFileOut -Tail 120
     } else {
         Write-Output "(missing log file)"
+    }
+    if (Test-Path $pidFile) {
+        $pidValue = (Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue).Trim()
+        $parsedPid = 0
+        if ([int]::TryParse($pidValue, [ref]$parsedPid)) {
+            Stop-Process -Id $parsedPid -Force -ErrorAction SilentlyContinue
+        }
+        Remove-Item -Path $pidFile -ErrorAction SilentlyContinue
     }
     $global:LASTEXITCODE = 1
     return
 }
 
-$pidFile = Join-Path $runtimeDir "api.pid"
 $apiPid = $null
 if (Test-Path $pidFile) {
     $pidValue = (Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue).Trim()
