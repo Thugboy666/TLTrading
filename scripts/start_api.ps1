@@ -47,6 +47,72 @@ if ($envFileExists) {
 Remove-Item Env:PACKET_SIGNING_PRIVATE_KEY_BASE64 -ErrorAction SilentlyContinue
 Remove-Item Env:PACKET_SIGNING_PUBLIC_KEY_BASE64  -ErrorAction SilentlyContinue
 
+function Get-ListenerPid {
+    param(
+        [int]$Port
+    )
+    $pids = @()
+    $netTcpCommand = Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue
+    if ($netTcpCommand) {
+        try {
+            $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction Stop
+            $pids = $connections | Select-Object -ExpandProperty OwningProcess
+        } catch {
+            $pids = @()
+        }
+    }
+
+    if (-not $pids -or $pids.Count -eq 0) {
+        try {
+            $netstatLines = netstat -ano | findstr ":$Port"
+            foreach ($line in $netstatLines) {
+                if ($line -match "LISTENING" -or $line -match "LISTEN") {
+                    $parts = $line -split "\s+"
+                    $pidValue = $parts[-1]
+                    $parsedPid = 0
+                    if ([int]::TryParse($pidValue, [ref]$parsedPid)) {
+                        $pids += $parsedPid
+                    }
+                }
+            }
+        } catch {
+            $pids = @()
+        }
+    }
+
+    $uniquePids = $pids | Where-Object { $_ -ne $null } | Select-Object -Unique
+    if ($uniquePids.Count -gt 1) {
+        throw "Multiple listening PIDs found for port $Port: $($uniquePids -join ', ')."
+    }
+    if ($uniquePids.Count -eq 1) {
+        return $uniquePids[0]
+    }
+    return $null
+}
+
+function Test-IsUvicornProcess {
+    param(
+        [int]$ProcessId
+    )
+    $process = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
+    if (-not $process) {
+        return $false
+    }
+
+    $commandLine = $null
+    try {
+        $commandLine = (Get-CimInstance Win32_Process -Filter "ProcessId=$ProcessId").CommandLine
+    } catch {
+        $commandLine = $null
+    }
+
+    if ($commandLine) {
+        return ($commandLine -match "uvicorn") -or ($commandLine -match "thelighttrading.api.server")
+    }
+
+    return $process.ProcessName -match "python|uvicorn"
+}
+
 foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), $logDir, $stateDir)) {
     if (-Not (Test-Path -Path $dir)) {
         New-Item -ItemType Directory -Path $dir | Out-Null
@@ -56,28 +122,34 @@ foreach ($dir in @($runtimeDir, (Join-Path $runtimeDir "data"), $logDir, $stateD
 if (-not (Test-Path -Path $logFileOut)) { New-Item -ItemType File -Path $logFileOut -Force | Out-Null }
 if (-not (Test-Path -Path $logFileErr)) { New-Item -ItemType File -Path $logFileErr -Force | Out-Null }
 
-if (Test-Path $pidFile) {
-    $existingPidContent = Get-Content -Path $pidFile -Raw -ErrorAction SilentlyContinue
-    $existingPidValue = $existingPidContent.Trim()
-    $existingPid = 0
-    if ([int]::TryParse($existingPidValue, [ref]$existingPid)) {
-        $existingProcess = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
-        if ($existingProcess) {
-            Write-Warning "API already appears to be running with PID $existingPid. Use scripts/stop_api.ps1 to stop it."
-            $global:LASTEXITCODE = 1
-            return
-        }
-    }
-
-    Remove-Item $pidFile -ErrorAction SilentlyContinue
-}
-
 . "$PSScriptRoot/_load_env.ps1"
 
 if (-not $env:APP_HOST) { $env:APP_HOST = "127.0.0.1" }
 if (-not $env:APP_PORT) { $env:APP_PORT = "8080" }
 if (-not $env:DATA_DIR) { $env:DATA_DIR = Join-Path $runtimeDir "data" }
 if (-not $env:LOG_DIR) { $env:LOG_DIR = Join-Path $runtimeDir "logs" }
+
+try {
+    $existingListenerPid = Get-ListenerPid -Port ([int]$env:APP_PORT)
+} catch {
+    Write-Error $_
+    $global:LASTEXITCODE = 1
+    return
+}
+
+if ($existingListenerPid) {
+    if (Test-IsUvicornProcess -ProcessId $existingListenerPid) {
+        Write-Error "API already running with listener PID $existingListenerPid on port $($env:APP_PORT)."
+    } else {
+        Write-Error "Port $($env:APP_PORT) is already in use by PID $existingListenerPid."
+    }
+    $global:LASTEXITCODE = 1
+    return
+}
+
+if (Test-Path $pidFile) {
+    Remove-Item $pidFile -ErrorAction SilentlyContinue
+}
 
 Set-Location $repoRoot
 
@@ -111,14 +183,37 @@ if (-not $ready) {
     return
 }
 
-Set-Content -Path $pidFile -Value $uvicornProcess.Id
+try {
+    $listenerPid = Get-ListenerPid -Port ([int]$env:APP_PORT)
+} catch {
+    Write-Error $_
+    Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 1
+    return
+}
+
+if (-not $listenerPid) {
+    Write-Error "API became reachable, but no listener PID found for port $($env:APP_PORT)."
+    Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 1
+    return
+}
+
+if (-not (Test-IsUvicornProcess -ProcessId $listenerPid)) {
+    Write-Error "API health responded, but port $($env:APP_PORT) is owned by PID $listenerPid which does not appear to be uvicorn."
+    Stop-Process -Id $uvicornProcess.Id -Force -ErrorAction SilentlyContinue
+    $global:LASTEXITCODE = 1
+    return
+}
+
+Set-Content -Path $pidFile -Value $listenerPid
 $status = [ordered]@{
-    pid        = $uvicornProcess.Id
+    pid        = $listenerPid
     started_at = [int][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
     port       = [int]$env:APP_PORT
     status     = "running"
 }
 $status | ConvertTo-Json | Set-Content -Path $statusFile
-Write-Output "API started with uvicorn PID $($uvicornProcess.Id)."
+Write-Output "API started with uvicorn PID $listenerPid."
 $global:LASTEXITCODE = 0
 return
